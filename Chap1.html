@@ -67,18 +67,41 @@ pmat <- mat/sum(mat)       # 全数で割って相対値を計算
 print(mat)        # 絶対数の表示
 print(round(pmat, 2))        # 相対値を表示（小数点以下2桁まで）
 
-pmat_r <- rowSums(pmat)
-pmat_c <- colSums(pmat)
+pmat_r <- rowSums(pmat)    # 相対値行列の行和計算
+pmat_c <- colSums(pmat)    # 相対値行列の列和計算
 c(pmat[1,1]/pmat_r[1], mat[1,1]/sum(mat[1,]))  # 未成熟だった場合の1990年代の割合
 c(pmat[1,1]/pmat_c[1], mat[1,1]/sum(mat[,1]))  # 1990年代の未成熟の割合
 
-p_imat <- sapply(1:3, function(i) pmat[1,i]/colSums(pmat)[i])
-prior <- c(1/3,1/3,1/3)
-( post_bayes <- p_imat*prior/sum(p_imat*prior) )
+p_imat <- sapply(1:3, function(i) pmat[1,i]/colSums(pmat)[i])    # Pr(X年代|未成熟): 尤度
+prior <- c(1/3,1/3,1/3)     # Pr(X年代):事前分布
+( post_bayes <- p_imat*prior/sum(p_imat*prior) )    # Pr(X年代|未成熟)∝Pr(未成熟|X年代)*Pr(X年代)
 
 ## 1 - 6 ブートストラップとシミュレーション
 
+set.seed(1)      # 乱数のseed設定
+n <- length(whale)     # whaleデータのサンプルサイズ
+Sim <- 1000      # シミュレーション回数
+bs <- matrix(sample(whale, n*Sim, replace=TRUE), nrow=Sim, ncol=n)     # whaleデータをSim回分作成（Sim行n列の行列にする） 
+bs_med <- apply(bs, 1, median)     # 各行の中央値を計算
+barplot(table(bs_med))     # 中央値のbootstrapサンプルのヒストグラムを描画
 
+p0 <- rowSums(mat)[2]/sum(mat)    #  全体の成熟割合を計算（帰無仮説）
+p_b <- NULL    # ブートストラップ結果の入れ物
+set.seed(1)    # 乱数のseedを決めることで再現性を確保
+for (i in 1:1000){     # 1000回の繰り返し計算
+  p <- table(sample(c(0,1),colSums(mat)[3],prob=c(1-p0,p0),replace=TRUE))    # 帰無仮説に従って，2010年代のデータと同じ観測数の未成熟・成熟個体を作ってやる
+  p_b <- c(p_b, p[2]/sum(p))    # 帰無仮説に従う2010年代の成熟個体割合
+}
+p_obs <- mat[2,3]/colSums(mat)[3]    # 観測された2010年代の成熟個体割合
+hist(p_b)     # 帰無仮説のもとでの成熟割合のヒストグラム（帰無分布）
+abline(v = p_obs, col="blue", lwd=3)    # 観測割合をヒストグラム上に表示
+
+# 大数の法則
+set.seed(1)    # 乱数のseed設定
+p <- 0.3     # 確率を0.3に設定
+x <- sample(c(0,1),1000,prob=c(1-p,p),replace=TRUE)   #  確率pで1，(1-p)で0となる二値データを1000個作成
+plot(1:1000,sapply(1:1000, function(i) mean(x[1:i])),xlab="sample size",ylab="Mean",pch=16,col="blue")     # 最初の1個から1000個まで足し算するものを増やしていって個数が増えたら平均値がどうなるかを計算
+abline(h=p,lty=2,lwd=2,col=gray(0.4))    # 真値の線を描く 
 
 </body>
 </html>
