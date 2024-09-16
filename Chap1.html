@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+</head>
+ 
+<body>
+
+# 1-2
+
+whale <- c(20,0,5,10,15)   #  whaleは5個の要素を持つベクトルとする
+
+sum(whale)/length(whale)   #  whaleデータの平均値を計算．mean(whale)としても良い
+
+whale2 <- c(20,0,5,10,1500)    #  whaleデータの最後の要素を100倍して1500にした
+
+c(median(whale), median(whale2))    # whaleとwhale2の中央値を計算．平均なら大きく変わるが，中央値だと同じ
+
+c(var(whale), var(whale2))    # whaleとwhale2の分散を比較
+
+c(sd(whale), sd(whale2))    # whaleとwhale2の標準偏差を比較
+
+( se <- c(sd(whale), sd(whale2))/sqrt(length(whale)) )    # whaleとwhale2の標準誤差を比較
+
+mu <- c(mean(whale), mean(whale2))   #  whaleとwhale2の平均値
+( cv <- se/mu )    #  whaleとwhale2の平均の変動係数を比較
+
+#
+
+</body>
+</html>
