@@ -36,8 +36,72 @@ dat <- cats      # datにcatsデータをコピー
 dat_F <- subset(dat, Sex=="F")      # datの中の雌のデータをdat_Fとする
 dat_M <- subset(dat, Sex=="M")      # datの中の雄のデータをdat_Mとする
 n1 <- nrow(dat_F); n2 <- nrow(dat_M)        # dat_F，dat_Mのサンプルサイズをn1，n2とする
-s <- sqrt(((n1-1)*sd(dat_F$Bwt)+(n2-1)*sd(dat_M$Bwt))/(n1+n2-2))      # 
-( test_stat <- (mean(dat_F$Bwt)-mean(dat_M$Bwt))/(s*sqrt(1/n1+1/n2)) )
+s <- sqrt(((n1-1)*var(dat_F$Bwt)+(n2-1)*var(dat_M$Bwt))/(n1+n2-2))     # 2つの分散を合併した分散の平方根（2集団で分散は等しいと仮定していることになる）
+( test_stat <- (mean(dat_F$Bwt)-mean(dat_M$Bwt))/(s*sqrt(1/n1+1/n2)) )    # 2標本のt検定の検定統計量を計算
+
+( pnorm(test_stat) )    # 上の検定統計量に対して正規分布でP値を計算
+
+( pt(test_stat, n1+n2-2) )     # 上の検定統計量に対してt分布でP値を計算
+
+n <- 100; Sim <- 100      # nはサンプルサイズ，Simはシミュレーションの回数
+include <- NULL     # 信頼区間が真値を含むかどうかを表す変数
+set.seed(1)     # 乱数のseed
+plot(1:Sim, rep(0,Sim), type="l", lty=2, xlab="Iteration (繰り返し数)", ylab="Confidence Interval (信頼区間)")       # x軸をシミュレーション回数とし，真値に線を引く
+for (i in 1:Sim){
+  x <- rnorm(n)       # n個の標準正規乱数
+  alpha <- 0.05      # 有意水準
+  z <- qnorm(1-alpha/2)         # 1-有意水準/2の標準正規の上側確率点
+  ci <- c(mean(x)-z*sd(x)/sqrt(n), mean(x)+z*sd(x)/sqrt(n))     # 正規信頼区間
+  include <- c(include, ci[1] < 0 & ci[2] > 0)     # 信頼区間が真値を含んでいればTRUE，そうでなければFALSE
+  segments(i, ci[1], i, ci[2], col=ifelse(tail(include,1),"blue",gray(0.3)))    # グラフに信頼区間を上書き
+}
+
+curve(dlnorm, from=0, to=8)      # 対数正規分布の密度関数
+abline(v=exp(0+1/2), lty=2, col="blue")        # 平均値の線
+
+library(mvtnorm)      # 多変量正規分布や多変量t分布を扱うパッケージ
+
+mu <- c(mean(cats$Bwt), mean(cats$Hwt))       # 猫の体重と心臓重量の平均値
+Sigma <- cov(cbind(cats$Bwt, cats$Hwt))       # 体重と心臓重量の分散共分散行列
+
+x <- seq(1.5, 4, by=0.1)     # x軸（体重）の範囲設定
+y <- seq(3, 18, by=0.1)      # y軸（心臓重量）の範囲設定
+f <- function(x, y) dmvnorm(cbind(x, y), mu, Sigma)           # x軸とy軸の値に対して二変量正規密度関数を計算する関数
+z <- outer(x, y, f)     # xとyに対する密度関数の値
+
+contour(x, y, z, xlab="体重 (kg)", ylab="心臓重量 (g)", main="Bivariate normal distribution")       # 等高線図をプロット
+
+## 2 - 3 ガンマ分布
+
+curve(dgamma(x, shape=1, rate=2), from=0, to=10, ylab="Density")      # ガンマ分布の密度関数（shape=1，rate=2のとき）
+curve(dgamma(x, shape=2, rate=2), from=0, to=10, lty=2, add=TRUE)       # ガンマ分布の密度関数（shape=2，rate=2のとき）
+curve(dgamma(x, shape=4, rate=1), from=0, to=10, lty=3, add=TRUE)       # ガンマ分布の密度関数（shape=4，rate=1のとき）
+legend("topright",c(expression(paste(alpha,"=",1,": ",lambda,"=",2)),expression(paste(alpha,"=",2,": ",lambda,"=",2)),expression(paste(alpha,"=",4,": ",lambda,"=",1))), lty=1:3)       # 判例を作成
+
+## 2 - 4 二項分布
+
+set.seed(1)        # 乱数のseedを設定
+n <- 10; p <- 0.3        # 試行回数10，成功確率0.3に設定
+x <- rbinom(10000,n,p)       # Bi(n,p)に従う成功回数の乱数を10000個作成
+print(c(mean(x), n*p))       # ランダムに作成したものの平均値と理論値があっているか確認
+print(c(var(x), n*p*(1-p)))      # ランダムに作成したものの分散と理論値があっているか確認
+
+n <- 10       # 試行回数10
+x <- 0:10      # 成功回数0~10
+plot(x, dbinom(x, n, 0.1), pch=16, ylab="Binomial Probability")      # 成功確率が0.1のときの二項分布の確率分布のグラフ
+points(x, dbinom(x, n, 0.5), pch=2, col="blue")       # 成功確率が0.5のときの二項分布の確率分布のグラフ（前のに重ね描き）
+legend("topright", c("p = 0.1", "p = 0.5"), pch=c(16,2), col=c("black","blue"))         # 判例を作成
+
+set.seed(1)
+p <- 0.5
+x <- matrix(NA, nrow=1000, ncol=1000)  # 1000回繰り返しのランダムウォークを1000個作成
+x[1,] <- rep(0,1000)  # ランダムウォークの初期位置を0に設定
+for (i in 1:999) x[i+1,] <- x[i,] + (1-2*rbinom(1000,1,p))  # ランダムウォークのstep 2から1000  
+par(mfrow=c(1,3))
+plot(sapply(1:1000, function(i) mean(x[i,])), type="l", lwd=2, xlab="Time Step", ylab="Mean")
+plot(sapply(1:1000, function(i) var(x[i,])), type="l", lwd=2, xlab="Time Step", ylab="Variance")
+hist(x[1000,])
+
 
 </body>
 </html>
