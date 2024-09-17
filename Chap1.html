@@ -72,16 +72,16 @@ pmat_c <- colSums(pmat)    # 相対値行列の列和計算
 c(pmat[1,1]/pmat_r[1], mat[1,1]/sum(mat[1,]))  # 未成熟だった場合の1990年代の割合
 c(pmat[1,1]/pmat_c[1], mat[1,1]/sum(mat[,1]))  # 1990年代の未成熟の割合
 
-p_imat <- sapply(1:3, function(i) pmat[1,i]/colSums(pmat)[i])    # Pr(X年代|未成熟): 尤度
+p_imat <- sapply(1:3, function(i) pmat[1,i]/colSums(pmat)[i])    # Pr(X年代|未成熟): 尤度．sapplyは，sapply(x, function(x) ...)のような形で，xの各要素にfunction(x)を適用した結果を返す関数
 prior <- c(1/3,1/3,1/3)     # Pr(X年代):事前分布
-( post_bayes <- p_imat*prior/sum(p_imat*prior) )    # Pr(X年代|未成熟)∝Pr(未成熟|X年代)*Pr(X年代)
+( post_bayes <- p_imat*prior/sum(p_imat*prior) )    # Pr(X年代|未成熟)=Pr(未成熟|X年代)*Pr(X年代)/Pr(未成熟)：ベイズの定理
 
 ## 1 - 6 ブートストラップとシミュレーション
 
 set.seed(1)      # 乱数のseed設定
 n <- length(whale)     # whaleデータのサンプルサイズ
 Sim <- 1000      # シミュレーション回数
-bs <- matrix(sample(whale, n*Sim, replace=TRUE), nrow=Sim, ncol=n)     # whaleデータをSim回分作成（Sim行n列の行列にする） 
+bs <- matrix(sample(whale, n*Sim, replace=TRUE), nrow=Sim, ncol=n)     # whaleデータをSim回分作成（Sim行n列の行列にする．sampleの引数replaceがTRUEなら復元抽出になる） 
 bs_med <- apply(bs, 1, median)     # 各行の中央値を計算
 barplot(table(bs_med))     # 中央値のbootstrapサンプルのヒストグラムを描画
 

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+</head>
+ 
+<body>
+
+## 2 - 1 確率変数の種類
+
+# 一様分布のグラフ
+plot(NA, xlim=c(0,1), ylim=c(0,1), xlab="Variable", ylab="Probability", frame.plot=FALSE)      # x軸，y軸とも0から1の範囲の座標を設定
+segments(0,0,0,1,col="blue")   # (0,0)から(0,1)へ線分を引く
+segments(0,1,1,1,col="blue")   # (0,1)から(1,1)へ線分を引く
+segments(1,1,1,0,col="blue")   # (1,1)から(1,0)へ線分を引く
+
+## 2 - 2 正規分布
+
+par(mfrow=c(1,2))     # 図を縦に2個描きますよという指令
+curve(dnorm, from=-3, to=3, main="確率密度関数")    # 最初に正規分布の密度関数を描く
+curve(pnorm, from=-3, to=3, main="累積分布関数")    # 次に正規分布の累積分布を描く
+
+qnorm(1-c(0.1,0.05,0.025,0.01,0.005))     # 標準正規分布の確率点を与える
+
+# 中心極限定理
+set.seed(1)     # 乱数のseedを設定
+par(mfrow=c(2,2))     # 図を4つ（2×2）作成
+for (i in c(7,20,100,500)){     # サンプルサイズを7，20，100，500に設定
+  x1 <- matrix(sample(c(0,1),i*1000,prob=c(0.8,0.2),replace=TRUE),nrow=i)    # p=0.2で1，0.8で0となるサンプルサイズiの二値データを1000個作成
+  hist(colMeans(x1),breaks=10,main=paste("n =",i),col="blue",xlab="Mean")    # 各サンプルサイズのデータに対して平均値を1000個計算してヒストグラムを描画
+}
+
+library(MASS)     # MASS packageを読み込む
+data(cats)       # catsデータを読み込み
+dat <- cats      # datにcatsデータをコピー
+dat_F <- subset(dat, Sex=="F")      # datの中の雌のデータをdat_Fとする
+dat_M <- subset(dat, Sex=="M")      # datの中の雄のデータをdat_Mとする
+n1 <- nrow(dat_F); n2 <- nrow(dat_M)        # dat_F，dat_Mのサンプルサイズをn1，n2とする
+s <- sqrt(((n1-1)*sd(dat_F$Bwt)+(n2-1)*sd(dat_M$Bwt))/(n1+n2-2))      # 
+( test_stat <- (mean(dat_F$Bwt)-mean(dat_M$Bwt))/(s*sqrt(1/n1+1/n2)) )
+
+</body>
+</html>
