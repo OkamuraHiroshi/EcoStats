@@ -83,11 +83,6 @@ print(round(sigma_sq, 3))        # 次数による二乗誤差の和の変化
 
 # cross validation
 
-set.seed(123)
-train_sp <- rownames(dat_M)[sample(nrow(dat_M),15)]
-train <- dat_M[rownames(dat_M) %in% train_sp,]
-test <- dat_M[!(rownames(dat_M) %in% train_sp),]
-
 set.seed(123)           # 乱数のseed設定
 train_sp <- rownames(dat_M)[sample(nrow(dat_M),15)]       # 15個のデータをランダムに選んでtrainingデータとする（行名を選ぶ）
 train <- dat_M[rownames(dat_M) %in% train_sp,]         # trainingデータを生成
@@ -104,6 +99,8 @@ train_ss <- train_ss/max(train_ss)*1.2*max(test_ss)     # train_ssの値の変�
 plot(test_ss,type="l",col="blue",xlab="Degree",ylab="sigma_squared",ylim=range(test_ss, train_ss),lwd=2)      # 次数に対してtest_ssをプロット
 lines(train_ss,col="gray",lwd=2,lty=2)     # train_ssを上描き
 legend("topright",c("Test","Training"),col=c("blue","gray"),lty=c(1,2),lwd=2)     # 凡例を作成
+
+## 3 - 4 カルバックライブラー情報量
 
 
 
