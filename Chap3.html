@@ -17,7 +17,7 @@ plot(dat$body, dat$brain, xlab="Body size (kg)", ylab="Brain size (g)")     # �
 ( res <- lm(brain~body, data=dat) )      # y=brain，x=bodyとした線形回帰y=a+bxを実行．結果をresに格納
 
 plot(dat$body, dat$brain, xlab="Body size (kg)", ylab="Brain size (g)")     # 再び上と同じ図を作成
-abline(a=res$coef[1], b=res$coef[2], col="blue")      # 推定した直線を上書きする
+abline(a=res$coef[1], b=res$coef[2], col="blue")      # 推定した直線を上描きする
 
 ( res2 <- lm(brain~body, data=subset(dat, body < 20000)) )       # 体重が20000よりも小さいデータだけに制限して直線を適合させる
 
@@ -29,7 +29,7 @@ dat$log_brain <- log(dat$brain)      # 対数変換した脳重量を新たな�
 dat$log_body <- log(dat$body)      # 対数変換した脳重量を新たな変数とする
 res3 <- lm(log_brain~log_body, data=dat)        # 対数変換した変数に対して直線回帰を実行
 plot(dat$log_body, dat$log_brain, xlab="log Body size", ylab="log Brain size")       # 観測データ（対数値）の散布図を作成
-abline(a=res3$coef[1], b=res3$coef[2], col="blue")       # 推定した直線を上書き
+abline(a=res3$coef[1], b=res3$coef[2], col="blue")       # 推定した直線を上描き
 
 resid <- residuals(res)       # 対数とらない場合の直線回帰の残差
 resid3 <- residuals(res3)       # 対数とった場合の直線回帰の残差
@@ -69,33 +69,42 @@ dat_M <- subset(dat, type=="M")      # 哺乳類のデータだけを抽出
 poly_reg <- function(k) lm(log_brain~poly(log_body,degree=k,raw=TRUE),data=dat_M)       # 多項式回帰をするための関数
 Res <- lapply(1:9, function(k) poly_reg(k))     # 多項式の次数を1から9まで変えてモデルをフィット
 
-par(mfrow=c(3,3))
-range_x <- range(dat_M$log_body)
-newdat_x <- seq(range_x[1], range_x[2], length.out=100)
-for (i in 1:9){
-plot(log_brain~log_body, data=dat_M, pch=16, main=paste("degree =", i), xlab="log body size", ylab="log brain size")
-lines(newdat_x, predict(Res[[i]],list(log_body=newdat_x)),col="blue")
+par(mfrow=c(3,3))      # 3行3列（全部で9枚）のグラフを描きます
+range_x <- range(dat_M$log_body)      #   x軸の値の範囲を設定
+newdat_x <- seq(range_x[1], range_x[2], length.out=100)       # x軸の値の範囲にxの一様な点を100個作る（あとで直線を描くのに必要）
+for (i in 1:9){      # iを1から9まで動かす
+plot(log_brain~log_body, data=dat_M, pch=16, main=paste("degree =", i), xlab="log body size", ylab="log brain size")        # 観測データのプロット
+lines(newdat_x, predict(Res[[i]],list(log_body=newdat_x)),col="blue")        # 1~9次の多項式回帰結果を上描き
 }
 
-sigma_sq <- sapply(1:9, function(k) sum((dat_M$log_brain - predict(Res[[k]]))^2))
-names(sigma_sq) <- paste0("degree", 1:9)
-print(round(sigma_sq, 3))
+sigma_sq <- sapply(1:9, function(k) sum((dat_M$log_brain - predict(Res[[k]]))^2)       # 次数1~9に対して二乗誤差の和を計算
+names(sigma_sq) <- paste0("degree", 1:9)      # 次数がなにかを示す名前を設定
+print(round(sigma_sq, 3))        # 次数による二乗誤差の和の変化
 
 # cross validation
+
 set.seed(123)
 train_sp <- rownames(dat_M)[sample(nrow(dat_M),15)]
 train <- dat_M[rownames(dat_M) %in% train_sp,]
 test <- dat_M[!(rownames(dat_M) %in% train_sp),]
-Res1 <- lapply(1:9, function(k) poly_reg(k))
-test_ss <- NULL
+
+set.seed(123)           # 乱数のseed設定
+train_sp <- rownames(dat_M)[sample(nrow(dat_M),15)]       # 15個のデータをランダムに選んでtrainingデータとする（行名を選ぶ）
+train <- dat_M[rownames(dat_M) %in% train_sp,]         # trainingデータを生成
+test <- dat_M[!(rownames(dat_M) %in% train_sp),]       # trainingデータでないデータをtestデータとする
+poly_reg <- function(k) lm(log_brain~poly(log_body,degree=k,raw=TRUE),data=train)     # trainingデータを使用した次数kの多項式回帰
+Res1 <- lapply(1:9, function(k) poly_reg(k))       # 次数1~9の多項式回帰結果
+train_ss <- test_ss <- NULL       # training/testデータのsum of squared errors
 for (i in 1:9){
-   test_ss <- c(test_ss, sum((test$log_brain - predict(Res1[[i]], newdata=test))^2))
+   train_ss <- c(train_ss, sum((train$log_brain - predict(Res1[[i]]))^2))　　　　　# trainingデータの二乗誤差の和
+   test_ss <- c(test_ss, sum((test$log_brain - predict(Res1[[i]], newdata=test))^2))　　　　　# testデータの二乗誤差の和．predictの引数newdataをtestとすることで，予測のためのデータをtestに置き換えている
 }
-names(test_ss) <- paste0("degree",1:9)
-train_ss <- sigma_sq/mean(sigma_sq)*mean(test_ss)
-plot(test_ss,type="l",col="blue",xlab="Degree",ylab="sigma_squared",ylim=range(test_ss, train_ss),lwd=2)
-lines(train_ss,col="gray",lwd=2,lty=2)
-legend("topright",c("Test","Training"),col=c("blue","gray"),lty=c(1,2),lwd=2)
+names(test_ss) <- paste0("degree",1:9)      # test_ssの要素の名前
+train_ss <- train_ss/max(train_ss)*1.2*max(test_ss)     # train_ssの値の変化をtest_ssの値と比較しやすいようにスケールを変えている
+plot(test_ss,type="l",col="blue",xlab="Degree",ylab="sigma_squared",ylim=range(test_ss, train_ss),lwd=2)      # 次数に対してtest_ssをプロット
+lines(train_ss,col="gray",lwd=2,lty=2)     # train_ssを上描き
+legend("topright",c("Test","Training"),col=c("blue","gray"),lty=c(1,2),lwd=2)     # 凡例を作成
+
 
 
 </body>
