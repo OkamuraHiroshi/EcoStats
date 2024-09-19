@@ -49,7 +49,53 @@ dat[dat$type=="D",]       # typeが"D"になっているデータを表示
 res4 <- lm(brain/body ~ type, data=dat)      # type（"M"か"D"）によって体重と脳重量の比に違いがあるかを検討
 summary(res4)       # 上の直線回帰結果の詳細を表示
 
+res4_1 <- lm(brain/body ~ type - 1, data=dat)     # 上の回帰だと，恐竜を基準にした哺乳類のものとなるが，切片を除くことにより，恐竜と哺乳類の平均を表示する
+summary(res4_1)      # 結果の詳細を表示
 
+res5 <- lm(log_brain ~ log_body*type, data=dat)       # typeとlog-体重とその交互作用を入れた回帰モデル
+round(summary(res5)$coef, 2)       # 回帰係数の結果を表示
+
+colors <- ifelse(dat$type=="D","black","blue")      # 色の設定．type="D"なら黒，"M"なら青
+par(mfrow=c(1,2))       # 横に並べて2つの図
+plot(dat$log_body, dat$log_brain, xlab="log Body size", ylab="log Brain size", col=colors, pch=16)         # 色分けして対数体重と対数脳重量の観測値をプロット
+abline(a=res5$coef[1], b=res5$coef[2], col="black")     # 恐竜の回帰直線
+abline(a=res5$coef[1]+res5$coef[3], b=res5$coef[2]+res5$coef[4], col="blue")     # 哺乳類の回帰直線
+hist(residuals(res5))      # typeとlog-体重とその交互作用を入れた回帰モデルの残差のヒストグラム
+
+## 3 - 3 線形回帰モデル（重回帰と過剰適合問題）
+
+dat_M <- subset(dat, type=="M")      # 哺乳類のデータだけを抽出
+
+poly_reg <- function(k) lm(log_brain~poly(log_body,degree=k,raw=TRUE),data=dat_M)       # 多項式回帰をするための関数
+Res <- lapply(1:9, function(k) poly_reg(k))     # 多項式の次数を1から9まで変えてモデルをフィット
+
+par(mfrow=c(3,3))
+range_x <- range(dat_M$log_body)
+newdat_x <- seq(range_x[1], range_x[2], length.out=100)
+for (i in 1:9){
+plot(log_brain~log_body, data=dat_M, pch=16, main=paste("degree =", i), xlab="log body size", ylab="log brain size")
+lines(newdat_x, predict(Res[[i]],list(log_body=newdat_x)),col="blue")
+}
+
+sigma_sq <- sapply(1:9, function(k) sum((dat_M$log_brain - predict(Res[[k]]))^2))
+names(sigma_sq) <- paste0("degree", 1:9)
+print(round(sigma_sq, 3))
+
+# cross validation
+set.seed(123)
+train_sp <- rownames(dat_M)[sample(nrow(dat_M),15)]
+train <- dat_M[rownames(dat_M) %in% train_sp,]
+test <- dat_M[!(rownames(dat_M) %in% train_sp),]
+Res1 <- lapply(1:9, function(k) poly_reg(k))
+test_ss <- NULL
+for (i in 1:9){
+   test_ss <- c(test_ss, sum((test$log_brain - predict(Res1[[i]], newdata=test))^2))
+}
+names(test_ss) <- paste0("degree",1:9)
+train_ss <- sigma_sq/mean(sigma_sq)*mean(test_ss)
+plot(test_ss,type="l",col="blue",xlab="Degree",ylab="sigma_squared",ylim=range(test_ss, train_ss),lwd=2)
+lines(train_ss,col="gray",lwd=2,lty=2)
+legend("topright",c("Test","Training"),col=c("blue","gray"),lty=c(1,2),lwd=2)
 
 
 </body>
