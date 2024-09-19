@@ -169,7 +169,47 @@ abline(v=var(x)/mean(x), col="blue")      # 観測値の平均と分散の比
 
 ## 2 - 6 その他の確率分布と混合分布
 
+# EM algorithm
+data(cats)        # catsという猫の体重と心臓重量のデータをloadする
+dat <- cats       # datにcatsをコピー
+b <- log(dat$Bwt)      # bは体重量の対数値
+pi_0 <- c(0.5, 0.5); mu_0 <- c(0.7, 1.2); sd_0 <- c(0.1, 0.2)      # 混合率，平均，標準偏差の初期値を設定
+d <- 1      # 収束判定のための値
+pi_vec <- pi_0; mu_vec <- mu_0; sd_vec <- sd_0     # パラメータの変化をとっておくための入れ物
+while (d > 0.0001){    # dが0.0001より大きい間は以下を繰り返す
+  p1_F <- pi_0[1]*dnorm(b, mu_0[1], sd_0[1])     # パラメータとデータからp_{i,1}を計算
+  p1_M <- pi_0[2]*dnorm(b, mu_0[2], sd_0[2])     # パラメータとデータからp_{i,2}を計算 
+  p1 <- cbind(p1_F, p1_M)       # p_{i,j}の行列
+  p1 <- sweep(p1, 1, p1_F+p1_M, FUN="/")      # sweepでp1を行方向にその和で割ってやって規格化している
+  pi_1 <-  colMeans(p1)      # 混合率を更新
+  mu_1 <- c(sum(p1[,1]*b)/sum(p1[,1]), sum(p1[,2]*b)/sum(p1[,2]))    # 平均を更新
+  sd_1 <- sqrt(c(sum(p1[,1]*(b-mu_1[1])^2)/sum(p1[,1]), sum(p1[,2]*(b-mu_1[2])^2)/sum(p1[,2])))      # 標準偏差を更新
+  d <- max(abs(c(pi_1-pi_0, mu_1-mu_0, sd_1-sd_0)))    # 更新前後のパラメータの差の絶対値の最大値を収束判定の指標とする
+  pi_0 <- pi_1; mu_0 <- mu_1; sd_0 <- sd_1     # 更新前のパラメータを更新後のパラメータで上書き
+  pi_vec <- rbind(pi_vec, pi_0); mu_vec <- rbind(mu_vec, mu_0); sd_vec <- rbind(sd_vec, sd_0)     # パラメータの変化を記録するため更新パラメータを時系列的に記録していく
+}
 
+# EM結果と実際のデータ（真）の比較
+names(pi_1) <- c("pi_F","pi_M"); names(mu_1) <- c("mu_F", "mu_M"); names(sd_1) <- c("sd_F", "sd_M")     # パラメータの要素に名前をつける
+rbind("Est" = pi_1, "Obs" = c(nrow(subset(dat, Sex=="F")), nrow(subset(dat, Sex=="M")))/nrow(dat))     # 推定された雌雄率と実際の雌雄率の比較
+rbind("Est" = mu_1, "Obs" = c(mean(b[dat$Sex=="F"]), mean(b[dat$Sex=="M"])))     # 推定された雌雄の平均値と実際の雌雄の平均値の比較
+rbind("Est" = sd_1, "Obs" = c(sd(b[dat$Sex=="F"]), sd(b[dat$Sex=="M"])))     # 推定された雌雄の標準偏差と実際の雌雄の標準偏差の比較
+brs <- seq(0.5,1.5,by=0.1)     # ヒストグラムの分割の指定
+h1 <- hist(b[dat$Sex=="M"], col=rgb(0, 1, 0, alpha=0.3), breaks=brs, ylim=c(0,32), xlab="Body Weight (log)", main="")       # 雄のヒストグラムを描画
+h2 <- hist(b[dat$Sex=="F"], col=rgb(1, 0, 0, alpha=0.3), breaks=brs, add=TRUE)       # 雌のヒストグラムを描画
+curve(0.1*sum(h1$count)*dnorm(x, mu_1[2], sd_1[2]), col="blue", add=TRUE)       # EMアルゴリズムから推定された雄の分布を上書き
+curve(0.1*sum(h2$count)*dnorm(x, mu_1[1], sd_1[1]), col="red", add=TRUE)       # EMアルゴリズムから推定された雌の分布を上書き
+
+# EMアルゴリズムが収束する様子
+par(mfrow=c(1,3))      # 図を3個横に並べます
+matplot(pi_vec, col=c(1,4), xlab="Iteration", ylab="pi")    # 最初の図は混合率の変化
+matplot(mu_vec, col=c(1,4), xlab="Iteration", ylab="mu")    # 次の図は平均の変化
+matplot(sd_vec, col=c(1,4), xlab="Iteration", ylab="sigma")      # 最後は標準偏差の変化
+
+EV <- sum(pi_1*sd_1^2)       # 分散の期待値
+VE <- sum(pi_1*(mu_1-c(pi_1%*%mu_1))^2)      # 期待値の分散
+V <- EV + VE       # 雌雄を併せた分散
+c( sqrt(V), sd(b) )      # 理論値と観測値の比較
 
 </body>
 </html>
