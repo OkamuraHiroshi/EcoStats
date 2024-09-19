@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+</head>
+ 
+<body>
+
+## 3 - 1 線形回帰モデル（単回帰）
+
+library(MASS)      # MASSパッケージを読み込み
+dat <- Animals        # Animalsデータ（動物の体重と脳重量のデータセット）をdatにコピー．Animalsデータの中身の詳細については，?Animalsで確認
+head(dat, 3)      # データの上側を表示してデータの中身を見る（デフォルトでは上側6行だが，3行を表示）
+
+plot(dat$body, dat$brain, xlab="Body size (kg)", ylab="Brain size (g)")     # 体重を横軸に脳重量を縦軸にプロットする
+
+( res <- lm(brain~body, data=dat) )      # y=brain，x=bodyとした線形回帰y=a+bxを実行．結果をresに格納
+
+plot(dat$body, dat$brain, xlab="Body size (kg)", ylab="Brain size (g)")     # 再び上と同じ図を作成
+abline(a=res$coef[1], b=res$coef[2], col="blue")      # 推定した直線を上書きする
+
+( res2 <- lm(brain~body, data=subset(dat, body < 20000)) )       # 体重が20000よりも小さいデータだけに制限して直線を適合させる
+
+plot(dat$body, dat$brain, xlab="Body size (kg)", ylab="Brain size (g)")        # 上と同じようにデータの散布図を作成
+abline(a=res$coef[1], b=res$coef[2], col="gray")          # 全データに対する直線をプロット
+abline(a=res2$coef[1], b=res2$coef[2], col="blue")          # 制限したデータに対する直線をプロット
+
+dat$log_brain <- log(dat$brain)      # 対数変換した脳重量を新たな変数とする
+dat$log_body <- log(dat$body)      # 対数変換した脳重量を新たな変数とする
+res3 <- lm(log_brain~log_body, data=dat)        # 対数変換した変数に対して直線回帰を実行
+plot(dat$log_body, dat$log_brain, xlab="log Body size", ylab="log Brain size")       # 観測データ（対数値）の散布図を作成
+abline(a=res3$coef[1], b=res3$coef[2], col="blue")       # 推定した直線を上書き
+
+resid <- residuals(res)       # 対数とらない場合の直線回帰の残差
+resid3 <- residuals(res3)       # 対数とった場合の直線回帰の残差
+par(mfrow=c(1,2))         # 図を横に2つ並べる
+hist(resid)         # 対数をとらない場合の残差のヒストグラム
+hist(resid3)         # 対数をとった場合の残差のヒストグラム
+
+## 3 - 2 線形回帰モデル（カテゴリカル変数と交互作用）
+
+rownames(dat)      # datの行名（ここでは動物の名前）を表示
+
+dat$type <- rep("M", nrow(dat))      # typeという変数を追加して，"M"というラベルとする（"M"はmammalの頭文字）
+dat$type[c(6,16,26)] <- "D"       # 6, 16, 26行目は恐竜なので，ラベルを"D"（dinosaurの頭文字）に変更
+dat$type <- factor(dat$type)      # typeを文字列からカテゴリー変数に変換
+dat[dat$type=="D",]       # typeが"D"になっているデータを表示
+
+res4 <- lm(brain/body ~ type, data=dat)      # type（"M"か"D"）によって体重と脳重量の比に違いがあるかを検討
+summary(res4)       # 上の直線回帰結果の詳細を表示
+
+
+
+
+</body>
+</html>
