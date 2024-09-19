@@ -102,7 +102,97 @@ legend("topright",c("Test","Training"),col=c("blue","gray"),lty=c(1,2),lwd=2)   
 
 ## 3 - 4 カルバックライブラー情報量
 
+for (p in c(0.01,0.2,0.5,0.99)) print( -(p*log(p)+(1-p)*log(1-p)), 3)      # 二項分布の情報エントロピーの計算例
 
+# AICのシミュレーション
+Res_aic <- NULL
+Sim <- 10000      
+set.seed(1234)
+for (n in c(10,100,500,1000)){
+  z <- matrix(rnorm(n*Sim, 0, 1),nrow=Sim,ncol=n)
+  TL <- apply(z,1,function(z) integrate(function(x) dnorm(x,0,1)*dnorm(x,mean(z),sqrt(var(z)*(n-1)/n),log=TRUE),-Inf,Inf)$value)
+  EL <- apply(z,1,function(z) mean(dnorm(z,mean(z),sqrt(var(z)*(n-1)/n),log=TRUE)))
+  Res_aic <- cbind(Res_aic, n*(EL-TL))
+}
+colnames(Res_aic) <- c(10,100,500,1000)
+round(colMeans(Res_aic),3)
+
+AIC_table <- rbind(
+  logLik = round(sapply(1:9, function(i) logLik(Res[[i]])), 2),
+  np = sapply(1:9, function(i) attributes(logLik(Res[[i]]))$df),
+  AIC = round(sapply(1:9, function(i) AIC(Res[[i]])),2)
+)
+colnames(AIC_table) <- paste0("deg_",1:9)
+print(AIC_table)
+
+## 3 - 5 一般化線形モデル
+
+dgnorm <- function(x, mu=0, alpha=sqrt(2), beta=2) beta/(2*alpha*gamma(1/beta))*exp(-(abs(x-mu)/alpha)^beta)
+gn_ent <- function(x) -dgnorm(x,mu,alpha,beta)*log(dgnorm(x,mu,alpha,beta))
+
+entropy <- NULL
+for (beta in seq(1,5,by=0.01)){
+  mu <- 0
+  alpha <- sqrt(gamma(1/beta)/gamma(3/beta))
+
+  entropy <- rbind(entropy, c(beta, integrate(function(x) gn_ent(x), -5, 5)$value))
+}
+entropy <- as.data.frame(entropy)
+colnames(entropy) <- c("beta","entropy")
+plot(entropy$beta, entropy$entropy, type="l", lwd=2, col="blue", xlab="beta", ylab="entropy")
+abline(v=2, lty=2, lwd=2, col="gray")
+
+## 3 - 6 ロジスティック回帰
+
+library(sizeMat)
+data(matFish)
+dat <- matFish
+head(dat)
+
+dat$maturity <- ifelse(dat$stage_mat=="I",0,1)
+
+plot(maturity~total_length, data=dat)
+res <- lm(maturity~total_length,data=dat)
+abline(a=res$coef[1],b=res$coef[2],col="blue",lty=2)
+
+res2 <- glm(maturity~total_length, data=dat, family=binomial)
+
+mat_prop <- tapply(dat$maturity,dat$total_length,mean)
+plot(unique(dat$total_length), mat_prop, xlab="total_length", ylab="maturity_proportion")
+x_seq <- seq(0,70)
+lines(x_seq, predict(res2, list(total_length=x_seq),type="response"),col="blue")
+
+tab_mat <- table(dat$total_length, dat$maturity)
+dat2 <- data.frame(tot_len=as.numeric(rownames(tab_mat)), n=as.numeric(rowSums(tab_mat)), m=as.numeric(tab_mat[,2]))
+res3 <- glm(cbind(m, n-m) ~ tot_len, data=dat2, family=binomial)
+
+logLik(res2); logLik(res3)
+
+## 3 - 7 ポアソン回帰
+
+library(pscl)
+data(prussian)
+dat <- prussian
+lambda_hat <- mean(dat$y)
+obs_prob <- prop.table(table(dat$y))
+pred_prob <- dpois(as.numeric(names(obs_prob)), lambda=lambda_hat)
+compared_prob <- cbind(obs_prob,pred_prob)
+colnames(compared_prob) <- c("Observed","Predicted")
+barplot(compared_prob , col=rep(c("gray","blue"),each=5), beside=TRUE)
+
+res <- glm(y~year, data=dat, family="poisson")
+plot(y~year, data=dat)
+x_seq <- unique(dat$year)
+lines(x_seq, predict(res, newdata=list(year=x_seq), type="response"), col="blue")
+
+mean_y <- tapply(dat$y, dat$year, mean)
+plot(mean_y~unique(dat$year), xlab="Year", ylab="Mean horsekicked")
+lines(x_seq, predict(res, newdata=list(year=x_seq), type="response"), col="blue")
+
+Res <- lapply(1:9, function(k) glm(y~poly(year,degree=k,raw=TRUE), data=dat, family=poisson))
+round(sapply(1:9, function(k) AIC(Res[[k]])), 2)
+plot(mean_y~unique(dat$year), xlab="Year", ylab="Mean horsekicked")
+lines(x_seq, predict(Res[[4]], newdata=list(year=x_seq), type="response"), col="blue")
 
 </body>
 </html>
