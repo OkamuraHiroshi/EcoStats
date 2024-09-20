@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+</head>
+ 
+<body>
+
+## 4 - 1 過分散
+
+library(statmod)      # statmodパッケージを読み込み
+g_he <- gauss.quad(10,kind="hermite")      # ガウス・エルミート積分の節点と重みの取得
+z <- g_he$nodes      # 節点
+w <- g_he$weights       # 重み
+
+dpois_normal <- function(x, mean=0, sd=1){
+  dens <- Vectorize(function(x) sum(w*exp(z^2)*exp(dpois(x, lambda=exp(z), log=TRUE)+dnorm(z, mean, sd, log=TRUE))))      # ポアソン分布の平均の対数値が正規分布に従うとして，平均の対数値にあたるランダム効果をガウス積分で積分消去したもの
+  
+  return(log(dens(x)))     # 対数周辺尤度
+}
+
+
+
+</body>
+</html>
