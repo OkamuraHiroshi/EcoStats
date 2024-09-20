@@ -105,66 +105,67 @@ legend("topright",c("Test","Training"),col=c("blue","gray"),lty=c(1,2),lwd=2)   
 for (p in c(0.01,0.2,0.5,0.99)) print( -(p*log(p)+(1-p)*log(1-p)), 3)      # 二項分布の情報エントロピーの計算例
 
 # AICのシミュレーション
-Res_aic <- NULL
-Sim <- 10000      
-set.seed(1234)
-for (n in c(10,100,500,1000)){
-  z <- matrix(rnorm(n*Sim, 0, 1),nrow=Sim,ncol=n)
-  TL <- apply(z,1,function(z) integrate(function(x) dnorm(x,0,1)*dnorm(x,mean(z),sqrt(var(z)*(n-1)/n),log=TRUE),-Inf,Inf)$value)
-  EL <- apply(z,1,function(z) mean(dnorm(z,mean(z),sqrt(var(z)*(n-1)/n),log=TRUE)))
-  Res_aic <- cbind(Res_aic, n*(EL-TL))
+Res_aic <- NULL        # AICの結果を入れる入れ物
+Sim <- 10000        # シミュレーション回数
+set.seed(1234)        # 乱数のseedを設定
+for (n in c(10,100,500,1000)){      # サンプルサイズn=10, 100, 500, 1000を検討
+  z <- matrix(rnorm(n*Sim, 0, 1),nrow=Sim,ncol=n)        # サンプルサイズnの標準正規乱数を1000セット用意
+  TL <- apply(z,1,function(z) integrate(function(x) dnorm(x,0,1)*dnorm(x,mean(z),sqrt(var(z)*(n-1)/n),log=TRUE),-Inf,Inf)$value)      # KL情報量の第二項を計算
+  EL <- apply(z,1,function(z) mean(dnorm(z,mean(z),sqrt(var(z)*(n-1)/n),log=TRUE)))       # 観測データに基づく対数尤度の平均（KL情報量の第2項と比較して2/n程度のずれが生じることが期待される（2はパラメータ数（平均と分散）））
+  Res_aic <- cbind(Res_aic, n*(EL-TL))     # ELとTLの差を計算してn倍すれば2ぐらいになるとすると，AICがTLの良い近似になっているという確認になる
 }
-colnames(Res_aic) <- c(10,100,500,1000)
-round(colMeans(Res_aic),3)
+colnames(Res_aic) <- c(10,100,500,1000)     # Res_aicの要素の名前
+round(colMeans(Res_aic),3)      # 結果の表示（n=10の近似は悪いが，n>=100ならだいたい2になっている）
 
 AIC_table <- rbind(
   logLik = round(sapply(1:9, function(i) logLik(Res[[i]])), 2),
   np = sapply(1:9, function(i) attributes(logLik(Res[[i]]))$df),
   AIC = round(sapply(1:9, function(i) AIC(Res[[i]])),2)
-)
-colnames(AIC_table) <- paste0("deg_",1:9)
-print(AIC_table)
+)       # 異なる次数のモデルに対する対数尤度，パラメータ数，AICの比較表
+colnames(AIC_table) <- paste0("deg_",1:9)      # 表の列名を指定
+print(AIC_table)        # 表をプリント
 
 ## 3 - 5 一般化線形モデル
 
-dgnorm <- function(x, mu=0, alpha=sqrt(2), beta=2) beta/(2*alpha*gamma(1/beta))*exp(-(abs(x-mu)/alpha)^beta)
-gn_ent <- function(x) -dgnorm(x,mu,alpha,beta)*log(dgnorm(x,mu,alpha,beta))
+# 一般化線形モデルがエントロピー最大になっているという意味で自然なモデルであると考えられるという話
 
-entropy <- NULL
-for (beta in seq(1,5,by=0.01)){
-  mu <- 0
-  alpha <- sqrt(gamma(1/beta)/gamma(3/beta))
+dgnorm <- function(x, mu=0, alpha=sqrt(2), beta=2) beta/(2*alpha*gamma(1/beta))*exp(-(abs(x-mu)/alpha)^beta)          # 一般化正規分布の密度関数
+gn_ent <- function(x) -dgnorm(x,mu,alpha,beta)*log(dgnorm(x,mu,alpha,beta))     # 一般化正規分布のエントロピーを定義
 
-  entropy <- rbind(entropy, c(beta, integrate(function(x) gn_ent(x), -5, 5)$value))
+entropy <- NULL        # 計算したエントロピーを入れる入れ物
+for (beta in seq(1,5,by=0.01)){     # betaを1から5まで0.01刻みで変える
+  alpha <- sqrt(gamma(1/beta)/gamma(3/beta))      # 分散=1であるとすると，alphaはbetaから計算できる（平均はデフォルト設定で0になっている）
+
+  entropy <- rbind(entropy, c(beta, integrate(function(x) gn_ent(x), -5, 5)$value))       # 分散一定としたときのentropyを計算
 }
-entropy <- as.data.frame(entropy)
-colnames(entropy) <- c("beta","entropy")
-plot(entropy$beta, entropy$entropy, type="l", lwd=2, col="blue", xlab="beta", ylab="entropy")
-abline(v=2, lty=2, lwd=2, col="gray")
+entropy <- as.data.frame(entropy)       # そのままだとentropyはmatrixになっているので，data.frameに変更
+colnames(entropy) <- c("beta","entropy")       # 列名をbetaとentropyとする
+plot(entropy$beta, entropy$entropy, type="l", lwd=2, col="blue", xlab="beta", ylab="entropy")      # betaに対してentropyの曲線をプロット
+abline(v=2, lty=2, lwd=2, col="gray")     # beta=2のときに縦線を引けば，beta=2のentropyが最大になっていることがわかる
 
 ## 3 - 6 ロジスティック回帰
 
-library(sizeMat)
-data(matFish)
-dat <- matFish
-head(dat)
+library(sizeMat)       # sizeMatというパッケージを読み込む
+data(matFish)       # sizeMatの中のmatFishというデータを読み込む
+dat <- matFish        # matFishデータをdatにコピー
+head(dat)          # datの中身を確認
 
-dat$maturity <- ifelse(dat$stage_mat=="I",0,1)
+dat$maturity <- ifelse(dat$stage_mat=="I",0,1)       # 成熟段階がIなら0，それ以外は1として，未成熟/成熟の2カテゴリーにする
 
-plot(maturity~total_length, data=dat)
-res <- lm(maturity~total_length,data=dat)
-abline(a=res$coef[1],b=res$coef[2],col="blue",lty=2)
+plot(maturity~total_length, data=dat)        # 全長に対する成熟状態のプロット
+res <- lm(maturity~total_length,data=dat)        # 全長に対する成熟状態に線形回帰をフィット
+abline(a=res$coef[1],b=res$coef[2],col="blue",lty=2)        # 線形回帰結果を上描き
 
-res2 <- glm(maturity~total_length, data=dat, family=binomial)
+res2 <- glm(maturity~total_length, data=dat, family=binomial)       # 確率分布を二項分布として一般化線形モデル（ロジスティック回帰）をフィット
 
-mat_prop <- tapply(dat$maturity,dat$total_length,mean)
-plot(unique(dat$total_length), mat_prop, xlab="total_length", ylab="maturity_proportion")
-x_seq <- seq(0,70)
-lines(x_seq, predict(res2, list(total_length=x_seq),type="response"),col="blue")
+mat_prop <- tapply(dat$maturity,dat$total_length,mean)       #
+plot(unique(dat$total_length), mat_prop, xlab="total_length", ylab="maturity_proportion")         #
+x_seq <- seq(0,70)         #
+lines(x_seq, predict(res2, list(total_length=x_seq),type="response"),col="blue")       #
 
-tab_mat <- table(dat$total_length, dat$maturity)
-dat2 <- data.frame(tot_len=as.numeric(rownames(tab_mat)), n=as.numeric(rowSums(tab_mat)), m=as.numeric(tab_mat[,2]))
-res3 <- glm(cbind(m, n-m) ~ tot_len, data=dat2, family=binomial)
+tab_mat <- table(dat$total_length, dat$maturity)        #
+dat2 <- data.frame(tot_len=as.numeric(rownames(tab_mat)), n=as.numeric(rowSums(tab_mat)), m=as.numeric(tab_mat[,2]))        #
+res3 <- glm(cbind(m, n-m) ~ tot_len, data=dat2, family=binomial)       #
 
 logLik(res2); logLik(res3)
 
