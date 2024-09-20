@@ -132,9 +132,10 @@ print(AIC_table)        # 表をプリント
 dgnorm <- function(x, mu=0, alpha=sqrt(2), beta=2) beta/(2*alpha*gamma(1/beta))*exp(-(abs(x-mu)/alpha)^beta)          # 一般化正規分布の密度関数
 gn_ent <- function(x) -dgnorm(x,mu,alpha,beta)*log(dgnorm(x,mu,alpha,beta))     # 一般化正規分布のエントロピーを定義
 
+mu <- 0        # 平均を0とする
 entropy <- NULL        # 計算したエントロピーを入れる入れ物
 for (beta in seq(1,5,by=0.01)){     # betaを1から5まで0.01刻みで変える
-  alpha <- sqrt(gamma(1/beta)/gamma(3/beta))      # 分散=1であるとすると，alphaはbetaから計算できる（平均はデフォルト設定で0になっている）
+  alpha <- sqrt(gamma(1/beta)/gamma(3/beta))      # 分散=1であるとすると，alphaはbetaから計算できる
 
   entropy <- rbind(entropy, c(beta, integrate(function(x) gn_ent(x), -5, 5)$value))       # 分散一定としたときのentropyを計算
 }
@@ -146,7 +147,7 @@ abline(v=2, lty=2, lwd=2, col="gray")     # beta=2のときに縦線を引けば
 ## 3 - 6 ロジスティック回帰
 
 library(sizeMat)       # sizeMatというパッケージを読み込む
-data(matFish)       # sizeMatの中のmatFishというデータを読み込む
+data(matFish)       # sizeMatの中のmatFishというデータを読み込む（データの詳細は?matFishで確認）
 dat <- matFish        # matFishデータをdatにコピー
 head(dat)          # datの中身を確認
 
@@ -158,42 +159,42 @@ abline(a=res$coef[1],b=res$coef[2],col="blue",lty=2)        # 線形回帰結果
 
 res2 <- glm(maturity~total_length, data=dat, family=binomial)       # 確率分布を二項分布として一般化線形モデル（ロジスティック回帰）をフィット
 
-mat_prop <- tapply(dat$maturity,dat$total_length,mean)       #
-plot(unique(dat$total_length), mat_prop, xlab="total_length", ylab="maturity_proportion")         #
-x_seq <- seq(0,70)         #
-lines(x_seq, predict(res2, list(total_length=x_seq),type="response"),col="blue")       #
+mat_prop <- tapply(dat$maturity,dat$total_length,mean)       #   体長の分類による成熟割合を計算する．tapplyはapplyのtable版
+plot(unique(dat$total_length), mat_prop, xlab="total_length", ylab="maturity_proportion")         # 体長に対する成熟割合をプロット
+x_seq <- seq(0,70)         # 体長の範囲を設定（下のグラフを描く際に必要）
+lines(x_seq, predict(res2, list(total_length=x_seq), type="response"), col="blue")       # 体長範囲に対して，ロジスティック回帰によって予測した成熟割合の曲線を上描き
 
-tab_mat <- table(dat$total_length, dat$maturity)        #
-dat2 <- data.frame(tot_len=as.numeric(rownames(tab_mat)), n=as.numeric(rowSums(tab_mat)), m=as.numeric(tab_mat[,2]))        #
-res3 <- glm(cbind(m, n-m) ~ tot_len, data=dat2, family=binomial)       #
+tab_mat <- table(dat$total_length, dat$maturity)        # 同じ体長クラスに属する成熟個体数を集計
+dat2 <- data.frame(tot_len=as.numeric(rownames(tab_mat)), n=as.numeric(rowSums(tab_mat)), m=as.numeric(tab_mat[,2]))        # 体長クラス内の総数，成熟数に集計したものにデータを整形する
+res3 <- glm(cbind(m, n-m) ~ tot_len, data=dat2, family=binomial)       # 集計データに対して二項分布回帰を適用
 
-logLik(res2); logLik(res3)
+logLik(res2); logLik(res3)        # 尤度の比較．回帰係数などの推定結果は同じだが，組み合わせの項の有無により尤度は違ってくるので注意が必要
 
 ## 3 - 7 ポアソン回帰
 
-library(pscl)
-data(prussian)
-dat <- prussian
-lambda_hat <- mean(dat$y)
-obs_prob <- prop.table(table(dat$y))
-pred_prob <- dpois(as.numeric(names(obs_prob)), lambda=lambda_hat)
-compared_prob <- cbind(obs_prob,pred_prob)
-colnames(compared_prob) <- c("Observed","Predicted")
-barplot(compared_prob , col=rep(c("gray","blue"),each=5), beside=TRUE)
+library(pscl)        # psclパッケージを読み込み
+data(prussian)         # psclの中のprussianというデータを読み込み（データの詳細は?prussianで確認）
+dat <- prussian         # prussianをdatにコピー
+lambda_hat <- mean(dat$y)        # 死亡者数yの平均値
+obs_prob <- prop.table(table(dat$y))       # 死亡者数yの出現割合を計算
+pred_prob <- dpois(as.numeric(names(obs_prob)), lambda=lambda_hat)      # ポアソン分布を仮定したときの死亡者数の期待割合
+compared_prob <- cbind(obs_prob,pred_prob)      # 観測とポアソン分布を仮定した予測値を並べる
+colnames(compared_prob) <- c("Observed","Predicted")       # 列名を指定
+barplot(compared_prob , col=rep(c("gray","blue"),each=5), beside=TRUE)      # 2つのヒストグラムを並べて描画
 
-res <- glm(y~year, data=dat, family="poisson")
-plot(y~year, data=dat)
-x_seq <- unique(dat$year)
-lines(x_seq, predict(res, newdata=list(year=x_seq), type="response"), col="blue")
+res <- glm(y~year, data=dat, family="poisson")      # 年に対する死亡者数をポアソン回帰する
+plot(y~year, data=dat)       # データをプロット
+x_seq <- unique(dat$year)        # 予測値をプロットするためのx軸の設定
+lines(x_seq, predict(res, newdata=list(year=x_seq), type="response"), col="blue")       # ポアソン回帰による予測値を上描き（これだと当てはまりが良いのか悪いのか判断が難しいという例）
 
-mean_y <- tapply(dat$y, dat$year, mean)
-plot(mean_y~unique(dat$year), xlab="Year", ylab="Mean horsekicked")
-lines(x_seq, predict(res, newdata=list(year=x_seq), type="response"), col="blue")
+mean_y <- tapply(dat$y, dat$year, mean)        # 年ごとの死亡者数の平均値の表を作成
+plot(mean_y~unique(dat$year), xlab="Year", ylab="Mean horsekicked")      # 年に対して平均値をプロット
+lines(x_seq, predict(res, newdata=list(year=x_seq), type="response"), col="blue")       # ポアソン回帰による予測値を上描き（こちらのほうが当てはまりの様子を理解しやすい）
 
-Res <- lapply(1:9, function(k) glm(y~poly(year,degree=k,raw=TRUE), data=dat, family=poisson))
-round(sapply(1:9, function(k) AIC(Res[[k]])), 2)
-plot(mean_y~unique(dat$year), xlab="Year", ylab="Mean horsekicked")
-lines(x_seq, predict(Res[[4]], newdata=list(year=x_seq), type="response"), col="blue")
+Res <- lapply(1:9, function(k) glm(y~poly(year,degree=k,raw=TRUE), data=dat, family=poisson))       # ポアソン多項式回帰
+round(sapply(1:9, function(k) AIC(Res[[k]])), 2)       # AICを計算
+plot(mean_y~unique(dat$year), xlab="Year", ylab="Mean horsekicked")      # 年に対して平均値をプロット
+lines(x_seq, predict(Res[[4]], newdata=list(year=x_seq), type="response"), col="blue")       # AIC最小のモデルの結果を上描き
 
 </body>
 </html>
