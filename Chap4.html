@@ -216,34 +216,34 @@ library(glmmTMB)       # パッケージglmmTMBを読み込み
 dat <- data.frame(x=x, n=1:length(x))        # データを設定
 ( mod_pn1 <- glmmTMB(x~(1|n), data=dat, family=poisson()) )      # ポアソン正規モデルを実行
 
-mod_p1 <- nlm(mod, rep(0, length(x)), x=x, model="poisson")
-plot(x, xlab="Iteration")
-points(exp(mod_p1$estimate), col=gray(0.5), pch=16)
-parms <- mod_pn1$fit$parfull
-points(exp(parms[names(parms) %in% "b"]), col="blue", pch=18)
-abline(h=exp(parms["beta"]), lty=2)
-legend("top",c("Poissson","Poisson-Normal"), pch=c(16,18), col=c(gray(0.5),"blue"), cex=1.2)
+mod_p1 <- nlm(mod, rep(0, length(x)), x=x, model="poisson")       # ポアソンモデルの平均をデータごとに異なるとして推定（データ1つでパラメータ1つを推定して，過剰適合になっている）
+plot(x, xlab="Iteration")      # データxをプロット
+points(exp(mod_p1$estimate), col=gray(0.5), pch=16)      # データごとに平均が異なるとしたポアソンモデルの平均をプロット
+parms <- mod_pn1$fit$parfull       # ポアソン正規モデルのパラメータを抽出
+points(exp(parms[names(parms) %in% "b"]), col="blue", pch=18)       # ランダム効果だけを抽出
+abline(h=exp(parms["beta"]), lty=2)      # ポアソン正規の平均パラメータに線を引く
+legend("top",c("Poissson","Poisson-Normal"), pch=c(16,18), col=c(gray(0.5),"blue"), cex=1.2)      # データごとに平均が異なるとしたポアソンモデルに対してポアソン正規モデルはshrinkageをしていることを示すプロット
 
 ## 4 - 6 ゼロ過多モデル
 
-library(pscl)
-data(bioChemists)
-dat <- bioChemists
-barplot(table(dat$art))
+library(pscl)      # パッケージpsclを読み込み
+data(bioChemists)       # bioChemistsデータを読み込み
+dat <- bioChemists       # datにbioChemistsデータをコピー
+barplot(table(dat$art))       # 論文数の内訳をプロット
 
-summary(dat)
+summary(dat)      # bioChemsitsデータの要約を表示
 
-mod_p <- glmmTMB(art ~ fem+mar+kid5+phd+ment, family=poisson, data=dat)
-mod_nb <- glmmTMB(art ~ fem+mar+kid5+phd+ment, family=nbinom2, data=dat)
-mod_zip <- glmmTMB(art ~ fem+mar+kid5+phd+ment, zi= ~fem+mar+kid5+phd+ment, family=poisson, data=dat)
-mod_zinb <- glmmTMB(art ~ fem+mar+kid5+phd+ment, zi= ~fem+mar+kid5+phd+ment, family=nbinom2, data=dat)
-AIC(mod_p, mod_nb, mod_zip, mod_zinb)
+mod_p <- glmmTMB(art ~ fem+mar+kid5+phd+ment, family=poisson, data=dat)     # ポアソン分布
+mod_nb <- glmmTMB(art ~ fem+mar+kid5+phd+ment, family=nbinom2, data=dat)     # 負の二項分布
+mod_zip <- glmmTMB(art ~ fem+mar+kid5+phd+ment, zi= ~fem+mar+kid5+phd+ment, family=poisson, data=dat)     # ゼロ過多ポアソン分布
+mod_zinb <- glmmTMB(art ~ fem+mar+kid5+phd+ment, zi= ~fem+mar+kid5+phd+ment, family=nbinom2, data=dat)     # ゼロ過多負の二項分布
+AIC(mod_p, mod_nb, mod_zip, mod_zinb)     # AICの比較
 
 ## 4 - 7 正則化
 
-library(MASS)
-data(cats)
-dat <- cats
+library(MASS)      # MASSパッケージの読み込み
+data(cats)       # catsデータの読み込み
+dat <- cats       #
 set.seed(1)
 dat$Bwt_s <- dat$Bwt + rnorm(nrow(dat),0,0.0001)
 dat2 <- data.frame(y=log(dat$Hwt), x1=log(dat$Bwt), x2=log(dat$Bwt_s))
