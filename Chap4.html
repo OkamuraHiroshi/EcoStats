@@ -19,6 +19,64 @@ dpois_normal <- function(x, mean=0, sd=1){
   return(log(dens(x)))     # 対数周辺尤度
 }
 
+mod <- function(p, x, model="poisson"){    # possion, negative binomial, possion-normalの負の対数尤度を計算するプログラム
+  if (model=="poisson"){      # model=="poisson"なら
+    lambda <- exp(p)     # ポアソン分布の平均はパラメータを指数変換したもの
+    like <- -sum(dpois(x, lambda=lambda, log=TRUE))       # ポアソン分布の負の対数尤度
+  }
+  if (model=="negbin"){      # model=="negbin"なら
+    mu <- exp(p[1])        # 負の二項分布の平均
+    d <- exp(p[2])        # 負の二項分布のdispersion parameter
+    like <- -sum(dnbinom(x, size=d, mu=mu, log=TRUE))       # 負の二項分布の負の対数尤度
+  }
+  if (model=="poisnorm"){      # model=="poisnorm"なら
+    mu <- p[1]        # 正規分布の平均
+    sigma <- exp(p[2])       # 正規分布の標準偏差
+    like <- -sum(dpois_normal(x, mean=mu, sd=sigma))     # ポアソン-正規分布の負の対数尤度
+  }
+  
+  like       # 結果となる負の対数尤度を出力
+}
+
+x <- c(1,3,7,0,2,2,0,1,2,8)       # チュパカブラのカウントデータ
+mod_1 <- nlm(mod, 0, x=x, model="poisson")        # ポアソン分布モデルのフィット
+mod_2 <- nlm(mod, c(0,0), x=x, model="negbin")        # 負の二項分布モデルのフィット
+mod_3 <- nlm(mod, c(0,0), x=x, model="poisnorm")        # ポアソン-正規分布モデルのフィット
+aic <- function(x) x$minimum*2 + 2*length(x$estimate)        # AICの関数を定義
+c("Poisson"=aic(mod_1), "NegBin"=aic(mod_2), "PoisNorm"=aic(mod_3))        # AICの結果を表示
+
+## 4 - 2 ランダム効果モデル
+
+set.seed(1)        # 乱数のseed設定
+a <- 0.2      # 直線の切片
+b <- -0.3      # 直線の傾き
+z <- rnorm(20,0,0.2)        # 切片に付与されるランダム効果
+x <- seq(-2,2,by=0.01)       # 固定効果の説明変数
+matplot(x,sapply(1:20, function(i) a+z[i]+b*x),type="l",col="blue",lty=1,xlab="x",ylab="log(lambda)")       # ランダム効果を与えて切片を変動させた直線を描画
+
+## 4 - 3 数値的最適化
+
+x <- seq(-5,5,by=0.1)      # xの範囲を設定
+plot(x, x^2, xlab="x", ylab="f(x)", type="l", lwd=2, col="blue", xaxt="n", yaxt="n")      # xに対してx^2をプロット
+
+# 勾配降下法
+L <- function(x) exp(x)-2*x
+dL <- function(x) exp(x)-2
+x <- numeric(500)
+x[1] <- 5
+lambda <- 0.01
+for (i in 2:500) x[i] <- x[i-1]-lambda*dL(x[i-1])
+plot(x,xlab="iteration",ylab="Value",ylim=c(0,5))
+
+# Newton-Raphson法
+d2L <- function(x) exp(x)
+x <- numeric(20)
+x[1] <- 5
+for (i in 2:20) x[i] <- x[i-1]-dL(x[i-1])/d2L(x[i-1])
+plot(x,xlab="iteration",ylab="x",ylim=c(0,5))
+
+
+
 
 
 </body>
