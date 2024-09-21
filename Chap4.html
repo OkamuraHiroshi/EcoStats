@@ -60,21 +60,144 @@ x <- seq(-5,5,by=0.1)      # xの範囲を設定
 plot(x, x^2, xlab="x", ylab="f(x)", type="l", lwd=2, col="blue", xaxt="n", yaxt="n")      # xに対してx^2をプロット
 
 # 勾配降下法
-L <- function(x) exp(x)-2*x
-dL <- function(x) exp(x)-2
-x <- numeric(500)
-x[1] <- 5
-lambda <- 0.01
-for (i in 2:500) x[i] <- x[i-1]-lambda*dL(x[i-1])
-plot(x,xlab="iteration",ylab="Value",ylim=c(0,5))
+L <- function(x) exp(x)-2*x        # ポアソン分布の対数尤度(x = log(lambda)が推定したいパラメータ）
+dL <- function(x) exp(x)-2         # 対数尤度をxで微分したもの
+x <- numeric(500)          # xの入れ物
+x[1] <- 5        # 初期値をx=5とする
+lambda <- 0.01       # 学習率を調整するパラメータ
+for (i in 2:500) x[i] <- x[i-1]-lambda*dL(x[i-1])      # 勾配降下法
+plot(x,xlab="iteration",ylab="Value",ylim=c(0,5))      # xの値の変化
 
 # Newton-Raphson法
-d2L <- function(x) exp(x)
-x <- numeric(20)
-x[1] <- 5
-for (i in 2:20) x[i] <- x[i-1]-dL(x[i-1])/d2L(x[i-1])
-plot(x,xlab="iteration",ylab="x",ylim=c(0,5))
+d2L <- function(x) exp(x)       # 2階微分
+x <- numeric(20)      # xの入れ物（勾配降下法より収束が速いだろうと想定）
+x[1] <- 5       # 初期値をx=5とする
+for (i in 2:20) x[i] <- x[i-1]-dL(x[i-1])/d2L(x[i-1])      # Newton-Raphson法
+plot(x,xlab="iteration",ylab="x",ylim=c(0,5))      # xの値の変化
 
+f1 <- function(p, x) -sum(dpois(x,lambda=exp(p),log=TRUE))     # ポアソンモデルの対数尤度
+f2 <- function(p, x) {     # 勾配を式で与える関数
+    res <- f1(p, x)      # ポアソンモデルの対数尤度
+    attr(res, "gradient") <- exp(p)-x      # ポアソンモデルの対数尤度の勾配
+    res
+}
+set.seed(1)     # 乱数生成のseed設定
+z <- rpois(100, lambda=mean(x))       # 100個のポアソン乱数
+system.time(nlm(f1,rep(0,100),x=z))      # 勾配を指定せず準ニュートン法を行う
+system.time(nlm(f2,rep(0,100),x=z))      # 勾配を指定してニュートン法を行う
+
+## 4 - 4 ランダム効果の取り扱い
+
+# ラプラス近似による周辺尤度評価のための関数の準備
+pn <- function(x, theta, phi) -sum(dpois(x,exp(theta),log=TRUE)+dnorm(theta,phi[1],exp(phi[2]),log=TRUE))      # ポアソン正規モデルの同時対数尤度
+
+g <- function(x, theta, phi) {
+  res <- pn(x, theta, phi)      # thetaとphiを与えたときの負の同時対数尤度
+  attr(res, "gradient") <- -(x-exp(theta)-(theta-phi[1])/(exp(2*phi[2])))     # phiを与えたときの，負の同時対数尤度のthetaによる微分
+  attr(res, "hessian") <- diag(exp(theta)+1/exp(2*phi[2]))        # phiを与えたときの，負の同時対数尤度のヘッセ行列
+  res
+}
+
+# ラプラス近似による周辺尤度の関数（ランダム効果thetaを積分消去するための内部的最適化を含む）
+f <- function(x, phi){
+   n <- length(x)        # サンプルサイズ
+   theta <- nlm(g, rep(0,n), x=x, phi=phi)$estimate     # phiを与えたときのthetaのMLEを推定
+   res <- g(x, theta, phi)       # thetaを与えたときのphiの負の同時対数尤度
+   hes <- attr(res, "hessian")     # hessianをhesに入れる
+   
+   as.numeric(res)-0.5*n*log(2*pi)+0.5*log(det(hes))    # Laplace近似による負の周辺尤度
+}
+
+# ラプラス近似を使用した最適化
+res_lap <- nlm(f, c(0,0), x=x)      # 最適化
+res <- rbind("Guass integration"=mod_3$estimate, "Laplace approximation"=res_lap$estimate)       # ガウス積分の計算結果とラプラス近似の計算結果の比較
+res[,2] <- exp(res[,2])       # 標準偏差の対数値のパラメータを元のスケールに戻す
+colnames(res) <- c("mean","sd")       # パラメータの名前を設定
+res       # 結果の表示
+
+## 4 - 5 Template Model BuilderとGLMM
+
+# ポアソン分布モデルの最適化関数
+sink("pois.cpp")    # "pois.cpp"というファイルに下のcat内のものを書き込む
+cat("        # " "内のものを書き込みする
+// Poisson distribution
+
+#include <TMB.hpp>      // TMBのヘッダファイル
+#include <iostream>      // Cppの入出力に関するヘッダファイル
+
+template<class Type>      // TMBのテンプレートですよという指定
+Type objective_function<Type>::operator() ()
+{
+  // DATA //
+  DATA_VECTOR(x);      // xはデータのベクトル
+  
+  // PARAMETER //
+   PARAMETER(log_lambda);     // log_lambdaというスカラーパラメータ
+   
+  // PARAMETER TRANSFORMATION //
+  Type lambda = exp(log_lambda);     // log_lambdaをexp変換したものをlambda（ポアソン分布の平均）とする
+  
+  // Main
+  int N = x.size();     // xのサイズ（要素数）をNとする
+  Type nll = 0.0;      // 目的関数 nll（negative log likelihoodの頭文字）の初期値を0とする
+  
+  for (int i=0;i<N;i++)  nll += -dpois(x(i), lambda, true);    // nllに各データの負の対数尤度をたしていく
+  
+  return nll;     // nllを返す
+}
+", fill=TRUE)     # fill=TRUEにすることで，最後に改行する
+sink()      # 外部ファイルへのアクセスを終了
+
+library(TMB)       # パッケージTMBを読み込む
+compile("pois.cpp")       # 上で作られた"pois.cpp"をコンパイル
+dyn.load(dynlib("pois"))       # poisファイルのDLL（ダイナミックリンクライブラリ）を作成（プログラム実行に必要）
+
+dat <- list(x=x)       # データのリスト
+pars <- list(log_lambda=0)      # パラメータの初期値
+obj <- MakeADFun(dat, pars, DLL="pois")      # データとパラメータの初期値を指定して，Rで使用可能なpoisの自動微分コードを作成
+mod_p <- nlminb(obj$par, obj$fn, obj$gr)      # パラメータの初期値，TMBで作られた目的関数，TMBで作られた勾配関数を指定してnlminbによって最適化（最適化の計算過程が表示されるが，表示したくなければ，MakeADFunでsilent=TRUEとする）
+
+res <- rbind("nlm"=mod_1$estimate, "TMB"=mod_p$par)     # ポアソンモデルに対する準ニュートン法（nlm）とTMBによる最適化結果を比較
+colnames(res) <- "lambda"      #　列名を指定
+res     # 結果の表示
+
+# ポアソン正規分布モデルの最適化関数
+sink("pois_norm.cpp")    # "pois_norm.cpp"というファイルに下のcat内のものを書き込む
+cat("        # " "内のものを書き込みする
+// Poisson distribution
+
+#include <TMB.hpp>
+#include <iostream>
+
+template<class Type>
+Type objective_function<Type>::operator() ()
+{
+  // DATA //
+  DATA_VECTOR(x);
+  
+  // PARAMETER //
+  PARAMETER(mu);
+  PARAMETER(log_sigma);
+  PARAMETER_VECTOR(z);
+  
+  // PARAMETER TRANSFORMATION //
+  Type sigma = exp(log_sigma);
+  
+  // Main
+  int N = x.size();
+  vector<Type> lambda(N);
+  Type nll=0.0;
+    
+  for (int i=0;i<N;i++){
+    nll += -dnorm(z(i), mu, sigma, true);
+    lambda(i) = exp(z(i));
+    nll += -dpois(x(i), lambda(i), true);
+  }
+  
+  return nll;
+}
+", fill=TRUE)
+sink()
 
 
 
