@@ -164,43 +164,94 @@ res     # 結果の表示
 # ポアソン正規分布モデルの最適化関数
 sink("pois_norm.cpp")    # "pois_norm.cpp"というファイルに下のcat内のものを書き込む
 cat("        # " "内のものを書き込みする
-// Poisson distribution
+// Poisson-Normal distribution
 
-#include <TMB.hpp>
-#include <iostream>
+#include <TMB.hpp>      // TMBのヘッダファイル
+#include <iostream>      // Cppの入出力に関するヘッダファイル
 
-template<class Type>
+template<class Type>      // TMBのテンプレートですよという指定
 Type objective_function<Type>::operator() ()
 {
   // DATA //
-  DATA_VECTOR(x);
+  DATA_VECTOR(x);      // xはデータのベクトル
   
   // PARAMETER //
-  PARAMETER(mu);
-  PARAMETER(log_sigma);
-  PARAMETER_VECTOR(z);
+  PARAMETER(mu);      // 正規分布の平均パラメータ
+  PARAMETER(log_sigma);      // 正規分布の標準偏差の対数のパラメータ
+  PARAMETER_VECTOR(z);      // ランダム効果
   
   // PARAMETER TRANSFORMATION //
-  Type sigma = exp(log_sigma);
+  Type sigma = exp(log_sigma);        // 標準偏差の対数を指数変換して標準偏差に戻す
   
   // Main
-  int N = x.size();
-  vector<Type> lambda(N);
-  Type nll=0.0;
+  int N = x.size();       // データのサイズ
+  vector<Type> lambda(N);      // ポアソン分布の平均はデータのサイズと同じN個
+  Type nll=0.0;       // 負の対数尤度（初期値=0）
     
   for (int i=0;i<N;i++){
-    nll += -dnorm(z(i), mu, sigma, true);
-    lambda(i) = exp(z(i));
-    nll += -dpois(x(i), lambda(i), true);
+    nll += -dnorm(z(i), mu, sigma, true);       // ランダム効果の対数尤度（正規分布）
+    lambda(i) = exp(z(i));     // ポアソン分布の平均はランダム効果を指数変換したもの
+    nll += -dpois(x(i), lambda(i), true);       // 観測データに対するポアソン分布の対数尤度
   }
   
-  return nll;
+  return nll;      // 負の対数尤度を出力
 }
-", fill=TRUE)
-sink()
+", fill=TRUE)      # 最後を改行
+sink()       # 外部ファイルへのアクセスを切断
 
+compile("pois_norm.cpp")        # ポアソン正規分布モデルのTMBファイルをコンパイル
+dyn.load(dynlib("pois_norm"))       # pois_normのDLLを作成
 
+dat <- list(x=x)      # データのリスト
+pars <- list(mu=0, log_sigma=0, z=rep(0,length(x)))      # パラメータの初期値
+obj <- MakeADFun(dat, pars, random="z", DLL="pois_norm")         # Rで使用可能なpois_normの自動微分コードを作成．random="z"でzをランダム効果に指定
+mod_pn <- nlminb(obj$par, obj$fn, obj$gr)      # nlminbによって最適化
 
+res <- rbind("Guass integration"=mod_3$estimate, "Laplace approximation"=mod_pn$par)       # ガウス積分を使用した結果とラプラス近似の結果を比較
+res[,2] <- exp(res[,2])       # 標準偏差の対数のパラメータを標準偏差に変換
+colnames(res) <- c("mean","sd")       # パラメータの名前を指定
+res        # 結果を表示
+
+library(glmmTMB)       # パッケージglmmTMBを読み込み
+dat <- data.frame(x=x, n=1:length(x))        # データを設定
+( mod_pn1 <- glmmTMB(x~(1|n), data=dat, family=poisson()) )      # ポアソン正規モデルを実行
+
+mod_p1 <- nlm(mod, rep(0, length(x)), x=x, model="poisson")
+plot(x, xlab="Iteration")
+points(exp(mod_p1$estimate), col=gray(0.5), pch=16)
+parms <- mod_pn1$fit$parfull
+points(exp(parms[names(parms) %in% "b"]), col="blue", pch=18)
+abline(h=exp(parms["beta"]), lty=2)
+legend("top",c("Poissson","Poisson-Normal"), pch=c(16,18), col=c(gray(0.5),"blue"), cex=1.2)
+
+## 4 - 6 ゼロ過多モデル
+
+library(pscl)
+data(bioChemists)
+dat <- bioChemists
+barplot(table(dat$art))
+
+summary(dat)
+
+mod_p <- glmmTMB(art ~ fem+mar+kid5+phd+ment, family=poisson, data=dat)
+mod_nb <- glmmTMB(art ~ fem+mar+kid5+phd+ment, family=nbinom2, data=dat)
+mod_zip <- glmmTMB(art ~ fem+mar+kid5+phd+ment, zi= ~fem+mar+kid5+phd+ment, family=poisson, data=dat)
+mod_zinb <- glmmTMB(art ~ fem+mar+kid5+phd+ment, zi= ~fem+mar+kid5+phd+ment, family=nbinom2, data=dat)
+AIC(mod_p, mod_nb, mod_zip, mod_zinb)
+
+## 4 - 7 正則化
+
+library(MASS)
+data(cats)
+dat <- cats
+set.seed(1)
+dat$Bwt_s <- dat$Bwt + rnorm(nrow(dat),0,0.0001)
+dat2 <- data.frame(y=log(dat$Hwt), x1=log(dat$Bwt), x2=log(dat$Bwt_s))
+col_mean <- apply(dat2, 2, mean)
+col_sd <- apply(dat2, 2, sd)
+dat2 <- sweep(sweep(dat2,2,col_mean,FUN="-"),2,col_sd,FUN="/")    # すべての変数を平均0，標準偏差1に基準化
+res <- lm(y~x1+x2, data=dat2)
+summary(res)$coef
 
 </body>
 </html>
