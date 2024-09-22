@@ -255,8 +255,8 @@ summary(res)$coef      # 回帰係数を表示（回帰係数が大きくなり�
 
 cov2cor(vcov(res))      # 回帰係数の相関係数（x1とx2の回帰係数の相関は-1）
 
-plot(dat2$y, predict(res), xlab="Observed", ylab="Predicted")
-legend("topleft",paste0("Correlation = ", round(cor(dat2$y, predict(res)),3)))
+plot(dat2$y, predict(res), xlab="Observed", ylab="Predicted")       # 観測値に対する（多重共線性を持つ）回帰モデルから得られた予測値のプロット
+legend("topleft",paste0("Correlation = ", round(cor(dat2$y, predict(res)),3)))      # 凡例の設定
 
 new_dat2 <- data.frame(x1=(log(3)-col_mean[2])/col_sd[2], x2=(log(3.1)-col_mean[3])/col_sd[3])
 pred_lm <- as.numeric(predict(res, newdata=new_dat2))
