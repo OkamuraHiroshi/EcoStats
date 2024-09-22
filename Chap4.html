@@ -109,6 +109,7 @@ f <- function(x, phi){
 }
 
 # ラプラス近似を使用した最適化
+x <- c(1,3,7,0,2,2,0,1,2,8)       # チュパカブラデータ
 res_lap <- nlm(f, c(0,0), x=x)      # 最適化
 res <- rbind("Guass integration"=mod_3$estimate, "Laplace approximation"=res_lap$estimate)       # ガウス積分の計算結果とラプラス近似の計算結果の比較
 res[,2] <- exp(res[,2])       # 標準偏差の対数値のパラメータを元のスケールに戻す
@@ -258,50 +259,51 @@ cov2cor(vcov(res))      # 回帰係数の相関係数（x1とx2の回帰係数�
 plot(dat2$y, predict(res), xlab="Observed", ylab="Predicted")       # 観測値に対する（多重共線性を持つ）回帰モデルから得られた予測値のプロット
 legend("topleft",paste0("Correlation = ", round(cor(dat2$y, predict(res)),3)))      # 凡例の設定
 
-new_dat2 <- data.frame(x1=(log(3)-col_mean[2])/col_sd[2], x2=(log(3.1)-col_mean[3])/col_sd[3])
-pred_lm <- as.numeric(predict(res, newdata=new_dat2))
-exp(pred_lm)
-quantile(dat$Hwt, probs=c(0.01,0.99))
+new_dat2 <- data.frame(x1=(log(3)-col_mean[2])/col_sd[2], x2=(log(3.1)-col_mean[3])/col_sd[3])         # x1の新しい測定値が3で，x2が3.1だとしたとき
+pred_lm <- as.numeric(predict(res, newdata=new_dat2))     # 心臓重量対数値の予測値
+exp(pred_lm)       # 指数変換でもとに戻す（すごくでかい値になる）
+quantile(dat$Hwt, probs=c(0.01,0.99))     # 元データの心臓重量の1%点と99%点
 
-Y <- log(dat$Hwt)
-X <- model.matrix(res)
-np <- length(res$coefficients)
-E_mat <- diag(np)
+Y <- log(dat$Hwt)       # 心臓重量の対数値
+X <- model.matrix(res)       # 説明変数の行列
+np <- length(res$coefficients)       # 係数の個数
+E_mat <- diag(np)       # np*npの対角行列
 E_mat[1,1] <- 0       #  切片をペナルティから除去するため
-lambda <- c(0,10^seq(-2, 1, length = 199))
-plot(lambda, sapply(lambda, function(k) det(t(X)%*%X+k*E_mat)), xlab="lambda", ylab="Determinant", type="l", col="blue", log="y")
+lambda <- c(0,10^seq(-2, 1, length = 199))      # リッジペナルティの大きさ
+plot(lambda, sapply(lambda, function(k) det(t(X)%*%X+k*E_mat)), xlab="lambda", ylab="Determinant", type="l", col="blue", log="y")      # リッジペナルティに対してt(X)%*%X+lambda*E_matの行列式をプロット
 
-beta_est <- function(lambda,Y,X) solve(t(X)%*%X+lambda*E_mat)%*%t(X)%*%Y
-CV <- numeric(length(lambda))
+beta_est <- function(lambda,Y,X) solve(t(X)%*%X+lambda*E_mat)%*%t(X)%*%Y      # リッジ回帰推定値
+CV <- numeric(length(lambda))       # cross validation結果の入れ物
 for (k in 1:length(lambda)){
   for (i in 1:length(Y)){
-    CV[k] <- CV[k] + (Y[i]-sum(beta_est(lambda[k], Y[-i], X[-i,])*X[i,]))^2
+    CV[k] <- CV[k] + (Y[i]-sum(beta_est(lambda[k], Y[-i], X[-i,])*X[i,]))^2     # leave-one-out cross validation
   }
 }
-plot(lambda, CV)
-abline(v=lambda[which.min(CV)], col="blue", lty=2)
+plot(lambda, CV)       # lambdaに対してCVの値をプロット
+abline(v=lambda[which.min(CV)], col="blue", lty=2)     # loocvが最小になるlambdaに線を引く
 
-exp(sum(beta_est(lambda[which.min(CV)],Y,X)*c(1,as.numeric(new_dat2))))
-quantile(dat$Hwt, probs=c(0.01,0.99))
+exp(sum(beta_est(lambda[which.min(CV)],Y,X)*c(1,a
+s.numeric(new_dat2))))     # リッジ回帰によるnew_dat2に対する予測値
+quantile(dat$Hwt, probs=c(0.01,0.99))     # 元データの心臓重量の1%点と99%点（リッジ推定値はこの区間内に入っている）
 
-library(glmnet)
-ridge_mod <- glmnet(X[,-1], Y, alpha = 0, lambda = lambda)
-cv_ridge <- cv.glmnet(X, Y, alpha=0)
-bestcv_ridge <- cv_ridge$lambda.min
-coef_ridge <- predict(ridge_mod, s=bestcv_ridge, type="coefficients")
-pred_ridge <- predict(ridge_mod, s=bestcv_ridge, newx=as.matrix(new_dat2))
+library(glmnet)      # glmnetパッケージを読み込む
+ridge_mod <- glmnet(X[,-1], Y, alpha = 0, lambda = lambda)      # 切片を除く説明変数行列と応答変数を指定．alpha=0はridge回帰となる
+cv_ridge <- cv.glmnet(X, Y, alpha=0)      # cross validationを実行
+bestcv_ridge <- cv_ridge$lambda.min       # cross validation errorを最小にするlambdaを特定
+coef_ridge <- predict(ridge_mod, s=bestcv_ridge, type="coefficients")        # best ridge回帰モデルの回帰係数
+pred_ridge <- predict(ridge_mod, s=bestcv_ridge, newx=as.matrix(new_dat2))        # best ridge回帰モデルの予測結果
 
-lasso_mod <- glmnet(X[,-1], Y, alpha = 1, lambda = lambda)
-cv_lasso <- cv.glmnet(X, Y, alpha=1)
-bestcv_lasso <- cv_lasso$lambda.min
-coef_lasso <- predict(lasso_mod, s=bestcv_lasso, type="coefficients")
-pred_lasso <- predict(lasso_mod, s=bestcv_lasso, newx=as.matrix(new_dat2))
+lasso_mod <- glmnet(X[,-1], Y, alpha = 1, lambda = lambda)      # 切片を除く説明変数行列と応答変数を指定．alpha=1はlasso回帰となる
+cv_lasso <- cv.glmnet(X, Y, alpha=1)      # cross validationを実行
+bestcv_lasso <- cv_lasso$lambda.min       # cross validation errorを最小にするlambdaを特定
+coef_lasso <- predict(lasso_mod, s=bestcv_lasso, type="coefficients")        # best lasso回帰モデルの回帰係数
+pred_lasso <- predict(lasso_mod, s=bestcv_lasso, newx=as.matrix(new_dat2))        # best lasso回帰モデルの予測結果
 
-betas <- cbind(res$coefficients, coef_ridge, coef_lasso)
-preds <- exp(c(pred_lm, pred_ridge, pred_lasso))
-colnames(betas) <- names(preds) <- c("lm","ridge", "lasso")
-betas
-preds
+betas <- cbind(res$coefficients, coef_ridge, coef_lasso)       # 制約なしの線形回帰，リッジ回帰，ラッソ回帰の回帰係数を並べて比較
+preds <- exp(c(pred_lm, pred_ridge, pred_lasso))       # 制約なしの線形回帰，リッジ回帰，ラッソ回帰の予測値を指数変換したものを並べて比較
+colnames(betas) <- names(preds) <- c("lm","ridge", "lasso")      # 列名を指定
+betas       # 回帰係数の比較
+preds       # 予測結果の比較
 
 </body>
 </html>
