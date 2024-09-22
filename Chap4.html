@@ -243,15 +243,65 @@ AIC(mod_p, mod_nb, mod_zip, mod_zinb)     # AICの比較
 
 library(MASS)      # MASSパッケージの読み込み
 data(cats)       # catsデータの読み込み
-dat <- cats       #
-set.seed(1)
-dat$Bwt_s <- dat$Bwt + rnorm(nrow(dat),0,0.0001)
-dat2 <- data.frame(y=log(dat$Hwt), x1=log(dat$Bwt), x2=log(dat$Bwt_s))
-col_mean <- apply(dat2, 2, mean)
-col_sd <- apply(dat2, 2, sd)
+dat <- cats       # catsデータをdatにコピー
+set.seed(1)      # 乱数発生のseed設定
+dat$Bwt_s <- dat$Bwt + rnorm(nrow(dat),0,0.0001)      # 体重量に小さなノイズを付与
+dat2 <- data.frame(y=log(dat$Hwt), x1=log(dat$Bwt), x2=log(dat$Bwt_s))        # ノイズを付与した体重量を持つデータを作成
+col_mean <- apply(dat2, 2, mean)     # 各変数（列方向）の平均
+col_sd <- apply(dat2, 2, sd)    #　列方向の標準偏差の計算
 dat2 <- sweep(sweep(dat2,2,col_mean,FUN="-"),2,col_sd,FUN="/")    # すべての変数を平均0，標準偏差1に基準化
-res <- lm(y~x1+x2, data=dat2)
-summary(res)$coef
+res <- lm(y~x1+x2, data=dat2)        # x1とx2を独立変数とした重回帰（x1とx2は非常によく似ているので多重共線性の問題が起こる）
+summary(res)$coef      # 回帰係数を表示（回帰係数が大きくなり，それらの係数の標準誤差も大きくなる）
+
+cov2cor(vcov(res))      # 回帰係数の相関係数（x1とx2の回帰係数の相関は-1）
+
+plot(dat2$y, predict(res), xlab="Observed", ylab="Predicted")
+legend("topleft",paste0("Correlation = ", round(cor(dat2$y, predict(res)),3)))
+
+new_dat2 <- data.frame(x1=(log(3)-col_mean[2])/col_sd[2], x2=(log(3.1)-col_mean[3])/col_sd[3])
+pred_lm <- as.numeric(predict(res, newdata=new_dat2))
+exp(pred_lm)
+quantile(dat$Hwt, probs=c(0.01,0.99))
+
+Y <- log(dat$Hwt)
+X <- model.matrix(res)
+np <- length(res$coefficients)
+E_mat <- diag(np)
+E_mat[1,1] <- 0       #  切片をペナルティから除去するため
+lambda <- c(0,10^seq(-2, 1, length = 199))
+plot(lambda, sapply(lambda, function(k) det(t(X)%*%X+k*E_mat)), xlab="lambda", ylab="Determinant", type="l", col="blue", log="y")
+
+beta_est <- function(lambda,Y,X) solve(t(X)%*%X+lambda*E_mat)%*%t(X)%*%Y
+CV <- numeric(length(lambda))
+for (k in 1:length(lambda)){
+  for (i in 1:length(Y)){
+    CV[k] <- CV[k] + (Y[i]-sum(beta_est(lambda[k], Y[-i], X[-i,])*X[i,]))^2
+  }
+}
+plot(lambda, CV)
+abline(v=lambda[which.min(CV)], col="blue", lty=2)
+
+exp(sum(beta_est(lambda[which.min(CV)],Y,X)*c(1,as.numeric(new_dat2))))
+quantile(dat$Hwt, probs=c(0.01,0.99))
+
+library(glmnet)
+ridge_mod <- glmnet(X[,-1], Y, alpha = 0, lambda = lambda)
+cv_ridge <- cv.glmnet(X, Y, alpha=0)
+bestcv_ridge <- cv_ridge$lambda.min
+coef_ridge <- predict(ridge_mod, s=bestcv_ridge, type="coefficients")
+pred_ridge <- predict(ridge_mod, s=bestcv_ridge, newx=as.matrix(new_dat2))
+
+lasso_mod <- glmnet(X[,-1], Y, alpha = 1, lambda = lambda)
+cv_lasso <- cv.glmnet(X, Y, alpha=1)
+bestcv_lasso <- cv_lasso$lambda.min
+coef_lasso <- predict(lasso_mod, s=bestcv_lasso, type="coefficients")
+pred_lasso <- predict(lasso_mod, s=bestcv_lasso, newx=as.matrix(new_dat2))
+
+betas <- cbind(res$coefficients, coef_ridge, coef_lasso)
+preds <- exp(c(pred_lm, pred_ridge, pred_lasso))
+colnames(betas) <- names(preds) <- c("lm","ridge", "lasso")
+betas
+preds
 
 </body>
 </html>
