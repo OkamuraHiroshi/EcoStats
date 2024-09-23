@@ -12,10 +12,14 @@ library(fishmethods)       # fishmethodsパッケージを読み込み
 library(tidyverse)        # tidyverseパッケージを読み込み
 data(pinfish)          # fishmethodsパッケージ内のpinfishデータを読み込み
 dat <- pinfish           # pinfishデータをdatにコピー
-p1 <- ggplot(dat, aes(x=age, y=sl)) + geom_point() + labs(x="Age", y="Lengh") + theme_bw()
-print(p1)
+p1 <- ggplot(dat, aes(x=age, y=sl)) + geom_point() + labs(x="Age", y="Lengh") + theme_bw()       # ggplotによって年齢に対する体長のプロットを作成
+print(p1)       # ggplotで作った図を表示
 
-
+mod <- nls(sl~Linf*(1-exp(-K*(age-a0))),data=dat,start=list(Linf=250,K=0.5,a0=0))        # 
+parms <- summary(mod)$coefficients[,1]
+Linf <- parms[1]; K <- parms[2]; a0 <- parms[3]
+vB <- Linf*(1-exp(-K*(dat$age-a0)))
+p2 <- p1 + geom_line(aes(x=age, y=vB), color="blue", linewidth=1.5)
 
 </body>
 </html>
