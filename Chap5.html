@@ -15,11 +15,34 @@ dat <- pinfish           # pinfishデータをdatにコピー
 p1 <- ggplot(dat, aes(x=age, y=sl)) + geom_point() + labs(x="Age", y="Lengh") + theme_bw()       # ggplotによって年齢に対する体長のプロットを作成
 print(p1)       # ggplotで作った図を表示
 
-mod <- nls(sl~Linf*(1-exp(-K*(age-a0))),data=dat,start=list(Linf=250,K=0.5,a0=0))        # 
-parms <- summary(mod)$coefficients[,1]
-Linf <- parms[1]; K <- parms[2]; a0 <- parms[3]
-vB <- Linf*(1-exp(-K*(dat$age-a0)))
-p2 <- p1 + geom_line(aes(x=age, y=vB), color="blue", linewidth=1.5)
+mod <- nls(sl~Linf*(1-exp(-K*(age-a0))),data=dat,start=list(Linf=250,K=0.5,a0=0))        # von Bertalanffyの成長曲線のフィット
+parms <- summary(mod)$coefficients[,1]        # 成長曲線のパラメータの推定値
+Linf <- parms[1]; K <- parms[2]; a0 <- parms[3]        # 推定パラメータを分かりやすい名前の変数に代入
+vB <- Linf*(1-exp(-K*(dat$age-a0)))        # 体長の予測値を計算
+p2 <- p1 + geom_line(aes(x=age, y=vB), color="blue", linewidth=1.5)       # 上で作った図p1に成長曲線による予測値を追加
+print(p2)        # 図の描画
+
+mod2 <- nls(log(sl)~log(Linf)+log(1-exp(-K*(age-a0))),data=dat,start=list(Linf=250,K=0.5,a0=0))        # 体長そのままではなく，対数変換したものにモデルを適用
+parms <- summary(mod2)$coefficients[,1]       # 成長曲線のパラメータの推定値
+Linf <- parms[1]; K <- parms[2]; a0 <- parms[3]        # 推定パラメータを分かりやすい名前の変数に代入
+vB2 <- Linf*(1-exp(-K*(dat$age-a0)))        # 体長の予測値を計算        
+p3 <- p2 + geom_line(aes(x=age, y=vB2), color="blue", linetype="dashed", linewidth=1.5)       # 上で作った図p2に対数変換したものに正規分布誤差を仮定した成長曲線による予測値を追加
+print(p3)        # 図の描画
+
+## 5 - 2 一般化加法モデル
+
+set.seed(666)
+xmax <- 5
+x <- 0:xmax
+n <- length(x)
+y <- rnorm(n,0,1)
+mod <- lm(y~poly(x,degree=n-1,raw=TRUE))
+xx <- seq(0,xmax,by=0.1)
+pred <- predict(mod, newdata=list(x=xx))
+dat <- data.frame(x=x,y=y)
+dat_p <- data.frame(x=xx,p=pred)
+p1 <- ggplot(dat,aes(x=x,y=y))+geom_point()+geom_line(data=dat_p,aes(x=x,y=p))+theme_bw()
+print(p1)
 
 </body>
 </html>
