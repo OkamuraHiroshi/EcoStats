@@ -31,18 +31,18 @@ print(p3)        # 図の描画
 
 ## 5 - 2 一般化加法モデル
 
-set.seed(666)
-xmax <- 5
-x <- 0:xmax
-n <- length(x)
-y <- rnorm(n,0,1)
-mod <- lm(y~poly(x,degree=n-1,raw=TRUE))
-xx <- seq(0,xmax,by=0.1)
-pred <- predict(mod, newdata=list(x=xx))
-dat <- data.frame(x=x,y=y)
-dat_p <- data.frame(x=xx,p=pred)
-p1 <- ggplot(dat,aes(x=x,y=y))+geom_point()+geom_line(data=dat_p,aes(x=x,y=p))+theme_bw()
-print(p1)
+set.seed(666)      # 乱数のseedを設定
+xmax <- 5       # xの最大値
+x <- 0:xmax       # xは0から5まで
+n <- length(x)     # xの要素数
+y <- rnorm(n,0,1)      # yはxの要素数と同じで，xとは独立に，標準正規分布から作成
+mod <- lm(y~poly(x,degree=n-1,raw=TRUE))       # yに対してxのn-1次の多項式回帰をフィット 
+xx <- seq(0,xmax,by=0.1)         # グラフ描画のためにx軸の値を細かく作成
+pred <- predict(mod, newdata=list(x=xx))         # 上のxxに対して予測値を計算
+dat <- data.frame(x=x,y=y)        # xとyの組をdatとする
+dat_p <- data.frame(x=xx,p=pred)      # xxとpredの組をdat_pとする
+p1 <- ggplot(dat,aes(x=x,y=y))+geom_point()+geom_line(data=dat_p,aes(x=x,y=p))+theme_bw()      # xとyの散布図に多項式回帰の曲線を上描き
+print(p1)      # 図を描画（データに完全にあてはまっている）
 
 </body>
 </html>
