@@ -44,5 +44,39 @@ dat_p <- data.frame(x=xx,p=pred)      # xxとpredの組をdat_pとする
 p1 <- ggplot(dat,aes(x=x,y=y))+geom_point()+geom_line(data=dat_p,aes(x=x,y=p))+theme_bw()      # xとyの散布図に多項式回帰の曲線を上描き
 print(p1)      # 図を描画（データに完全にあてはまっている）
 
+fit_sp <- spline(x,y)       # x，yにスプライン曲線をフィット
+dat_sp <- data.frame(x=fit_sp$x,y=fit_sp$y)      #  スプライン曲線フィット結果のデータを作成
+p2 <- p1 + geom_line(aes(x=x,y=y),linetype="dotted")+geom_line(data=dat_sp,aes(x=x,y=y),linetype="dashed",color="blue")        # 観測点をつないだものとスプライン曲線フィットの結果を上描き
+print(p2)       # 図の描画
+
+library(mgcv)       # mgcvパッケージの読み込み
+library(tidymv)       # tidyverse用にmgcv::gamの予測値などを扱うためのパッケージ
+library(pscl)       # psclパッケージの読み込み
+data(prussian)       # prussianデータの読み込み
+dat <- prussian       # datにprussianをコピー
+res <- gam(y~s(year), data=dat, family=poisson)       # 年を説明変数としてポアソン分布を誤差分布とするgamをフィット 
+pred <- predict_gam(res)         # 予測値の作成（predict_gamはtidymvパッケージの関数）
+dat2 <- dat %>% group_by(year) %>% summarize(mean_y=mean(y))        # 年ごとの死亡者数の平均値のデータを作成
+ggplot(pred, aes(x=year, y=exp(fit)))+geom_line()+geom_point(data=dat2,aes(x=year,y=mean_y))+labs(x="Year",y="Predicted Value")+theme_bw()      # gamによる予測結果の曲線と観測データを同時にプロットして比較
+
+## 5 - 4 樹木モデル
+
+library(rpart)       # rpartパッケージの読み込み
+library(rpart.plot)       # rpart.plotパッケージの読み込み
+library(MASS)       # MASSパッケージの読み込み
+data(cats)       # catsデータの読み込み
+dat <- cats        # datにcatsデータをコピー
+(res_dt <- rpart(Sex ~ Bwt, data=dat, method="class", parms=list(split="gini"), control=list(maxdepth=1)))
+
+set.seed(13)
+n <- nrow(dat)
+train <- sample(n,round(n*0.8))
+dat_train <- dat[train,]
+dat_test <- dat[-train,]
+(res_dt <- rpart(Sex ~ Bwt + Hwt, data=dat_train,　method="class", parms=list(split="gini"),control=list(maxdepth=30)))
+rpart.plot(res_dt)
+
+
+
 </body>
 </html>
