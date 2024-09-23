@@ -66,16 +66,35 @@ library(rpart.plot)       # rpart.plotパッケージの読み込み
 library(MASS)       # MASSパッケージの読み込み
 data(cats)       # catsデータの読み込み
 dat <- cats        # datにcatsデータをコピー
-(res_dt <- rpart(Sex ~ Bwt, data=dat, method="class", parms=list(split="gini"), control=list(maxdepth=1)))
+(res_dt <- rpart(Sex ~ Bwt, data=dat, method="class", parms=list(split="gini"), control=list(maxdepth=1)))         # datの性別を体重量で予測するtreeモデル
 
-set.seed(13)
-n <- nrow(dat)
-train <- sample(n,round(n*0.8))
-dat_train <- dat[train,]
-dat_test <- dat[-train,]
-(res_dt <- rpart(Sex ~ Bwt + Hwt, data=dat_train,　method="class", parms=list(split="gini"),control=list(maxdepth=30)))
-rpart.plot(res_dt)
+set.seed(13)       # 乱数発生のseed設定
+n <- nrow(dat)        # datのサンプルサイズ
+train <- sample(n,round(n*0.8))       # nのうちランダムに選んだ80%をトレーニングデータとする
+dat_train <- dat[train,]      # トレーニングデータ
+dat_test <- dat[-train,]      # テストデータ
+(res_dt <- rpart(Sex ~ Bwt + Hwt, data=dat_train,　method="class", parms=list(split="gini"),control=list(maxdepth=30)))        # 性別を体重と心臓重量で予測するtreeモデル
+rpart.plot(res_dt)        # treeによる分類結果を描画
 
+printcp(res_dt)       # cross validationによる最適なCP
+plotcp(res_dt)       # cross validationによるCPの変化プロット（CPは値の区間の幾何平均が使われているのでprintcpの値と違っている）
+
+library(pROC)
+pred_dt <- predict(res_dt,dat_test,type="prob")
+roc_dt <- roc(dat_test$Sex, as.numeric(pred_dt[,2]))
+ggroc(roc_dt,legacy.axes=TRUE)+xlab("FPR")+ylab("TPR")+ggtitle(paste("AUC =",round(roc_dt$auc,2)))+geom_segment(aes(x=0, xend=1, y=0, yend=1), color="blue", linetype="dashed")+theme_bw()
+
+mod <- list()
+par(mfrow=c(1,2))
+
+for (i in 1:2){
+  train <- sample(n,round(4/5*n))
+  dat_train <- dat[train,]
+  mod[[i]] <- rpart(Sex~Bwt+Hwt,data=dat_train,method="class")
+  rpart.plot(mod[[i]])
+}
+
+## 5 - 5 ランダムフォレスト
 
 
 </body>
