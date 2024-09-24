@@ -77,24 +77,80 @@ dat_test <- dat[-train,]      # テストデータ
 rpart.plot(res_dt)        # treeによる分類結果を描画
 
 printcp(res_dt)       # cross validationによる最適なCP
-plotcp(res_dt)       # cross validationによるCPの変化プロット（CPは値の区間の幾何平均が使われているのでprintcpの値と違っている）
+plotcp(res_dt)       # cross validationによるCPの変化プロット（x軸下のcpは，値の区間の幾何平均が使われているのでprintcpの値と違っている）
 
 library(pROC)       # pROCパッケージを読み込む
-pred_dt <- predict(res_dt,dat_test,type="prob")        #
-roc_dt <- roc(dat_test$Sex, as.numeric(pred_dt[,2]))
-ggroc(roc_dt,legacy.axes=TRUE)+xlab("FPR")+ylab("TPR")+ggtitle(paste("AUC =",round(roc_dt$auc,2)))+geom_segment(aes(x=0, xend=1, y=0, yend=1), color="blue", linetype="dashed")+theme_bw()
+pred_dt <- predict(res_dt,dat_test,type="prob")        # testデータに対する予測値
+roc_dt <- roc(dat_test$Sex, as.numeric(pred_dt[,2]))       # ROC曲線を描くためのアウトプット作成
+ggroc(roc_dt,legacy.axes=TRUE)+xlab("FPR")+ylab("TPR")+ggtitle(paste("AUC =",round(roc_dt$auc,2)))+geom_segment(aes(x=0, xend=1, y=0, yend=1), color="blue", linetype="dashed")+theme_bw()       # ggroc関数でROC曲線を描画．AUCも記載
 
-mod <- list()
-par(mfrow=c(1,2))
+set.seed(1)         # 乱数発生のseed設定
+mod <- list()        # モデル結果を入れるためのリスト
+par(mfrow=c(1,2))        # 図を2個作成
 
 for (i in 1:2){
-  train <- sample(n,round(4/5*n))
-  dat_train <- dat[train,]
-  mod[[i]] <- rpart(Sex~Bwt+Hwt,data=dat_train,method="class")
-  rpart.plot(mod[[i]])
-}
+  train <- sample(n,round(4/5*n))       # 80%をトレニーニングデータにする
+  dat_train <- dat[train,]        # トレーニングデータを作成
+  mod[[i]] <- rpart(Sex~Bwt+Hwt,data=dat_train,method="class")        # treeモデルをフィット
+  rpart.plot(mod[[i]])      # フィットしたtreeモデルの結果をプロット
+}        # 2つのモデルは結構違っている
 
 ## 5 - 5 ランダムフォレスト
+
+library(randomForest)       # randomForestパッケージの読み込み
+set.seed(1)        # 乱数発生のseed設定
+(res_bg <- randomForest(as.factor(Sex) ~ Bwt+Hwt, mtry=2, data = dat_train))        # バギングに実行（Sexはカテゴリーであると指定．mtry=2は説明変数の数と同じなのでバギングになっている）
+(res_rf <- randomForest(as.factor(Sex) ~ Bwt+Hwt, data = dat_train))         # ランダムフォレストの実行（mtryを指定しておらず，デフォルトでsqrt(p)（pは説明変数の数）が使用される変数の数になる（本文参照）
+
+pred_bg <- predict(res_bg,dat_test,type="prob")         # バギングによるテストデータの予測結果
+roc_bg <- roc(dat_test$Sex, as.numeric(pred_bg[,2]))        # バギングのROCアウトプット作成
+pred_rf <- predict(res_rf,dat_test,type="prob")         # ランダムフォレストによるテストデータの予測
+roc_rf <- roc(dat_test$Sex, as.numeric(pred_rf[,2]))        # ランダムフォレストのROCアウトプット作成
+ggroc(list(bagging=roc_bg, randomforest=roc_rf),legacy.axes=TRUE)+xlab("FPR")+ylab("TPR")+ggtitle(paste("AUC =",round(roc_bg$auc,2),", ",round(roc_rf$auc,2)))+geom_segment(aes(x=0, xend=1, y=0, yend=1), color="blue", linetype="dashed")+theme_bw()      # バギングの結果とランダムフォレストの結果を同時に描画．AUCも付与
+
+varImpPlot(res_rf)        # variable importance plot（変数の重要度のプロット）
+
+partialPlot(res_rf, dat, Bwt, "F")        # partial dependence plot（datに対するres_rfの結果のBwtに対するpartial dependence plot．"F"と"M"のクラスがあるので"F"の方をプロット）
+partialPlot(res_rf, dat, Hwt, "F")        # partial dependence plot（datに対するres_rfの結果のHwtに対するpartial dependence plot．"F"と"M"のクラスがあるので"F"の方をプロット）
+
+## 5 - 6 ブースティング
+
+library(gbm)         # gbmパッケージの読み込み
+set.seed(1)         # 乱数のseed設定
+dat_train$sex <- as.numeric(dat_train$Sex)-1       # 性別（"F"と"M"）を-1と1に変換
+res_ab <- gbm(sex ~ Bwt + Hwt, data = dat_train,distribution = "adaboost", n.trees = 100, bag.fraction=1, shrinkage = 1,  interaction.depth = 1, cv.folds = 5)      # adaboostをフィット
+res_gb <- gbm(sex ~ Bwt + Hwt, data = dat_train,distribution = "bernoulli", n.trees = 100, bag.fraction=1, shrinkage = 1,  interaction.depth = 1, cv.folds = 5)         # 勾配ブースティングのフィット
+res_sgb <- gbm(sex ~ Bwt + Hwt, data = dat_train,distribution = "bernoulli", n.trees = 100, bag.fraction=0.5, shrinkage = 0.1, interaction.depth = 2, cv.folds = 5)          # 確率的勾配ブースティングのフィット
+
+pred_ab <- predict(res_ab,dat_test,n.trees=which.min(res_ab$cv.error),type="response")       # adaboostの予測
+roc_ab <- roc(dat_test$Sex, as.numeric(pred_ab))       # adaboostのROC出力
+pred_gb <- predict(res_gb,dat_test,n.trees=which.min(res_gb$cv.error),type="response")       # 勾配ブースティングの予測
+roc_gb <- roc(dat_test$Sex, as.numeric(pred_gb))       # 勾配ブースティングのROC出力
+pred_sgb <- predict(res_sgb,dat_test,n.trees=which.min(res_sgb$cv.error),type="response")       # 確率的勾配ブースティングの予測
+roc_sgb <- roc(dat_test$Sex, as.numeric(pred_sgb))       # 確率的勾配ブースティングのROC出力
+ggroc(list(Ada_boost=roc_ab,Gradient_boost=roc_gb,Stochastic_gradient_boost=roc_sgb),legacy.axes=TRUE)+xlab("FPR")+ylab("TPR")+ggtitle(paste("AUC =",round(roc_ab$auc,2)," ",round(roc_gb$auc,2)," ",round(roc_sgb$auc,2)))+geom_segment(aes(x=0, xend=1, y=0, yend=1), color="brown", linetype="dashed")+theme_bw()        # adaboost, 勾配ブースティング，確率的勾配ブースティングのROC曲線とAUCの比較
+
+library(xgboost)       # xgboostパッケージの読み込み
+res_xgb_cv <- xgb.cv(param=list("objective" = "binary:logistic"), data = as.matrix(dat_train[,2:3]), label = dat_train$sex, nfold = 5, subsample=0.5, eta=0.1, nrounds=100, verbose=0)
+nround_xgb <- which.min(res_xgb_cv$evaluation_log[[4]])+1
+res_xgb <- xgboost(param=list("objective" = "binary:logistic"), data = as.matrix(dat_train[,2:3]), label = dat_train$sex, subsample=0.5, eta=0.1, nrounds=nround_xgb, verbose=0)
+pred_xgb <- predict(res_xgb,as.matrix(dat_test[,2:3]),type="response")
+roc_xgb <- roc(dat_test$Sex, as.numeric(pred_xgb))
+ggroc(roc_xgb,legacy.axes=TRUE)+xlab("FPR")+ylab("TPR")+ggtitle(paste("AUC =",round(roc_xgb$auc,2)))+geom_segment(aes(x=0, xend=1, y=0, yend=1), color="blue", linetype="dashed")+theme_bw()
+
+## 5 - 7 その他の非線形回帰手法
+
+library(nnet)
+res_nn <- nnet(sex~Bwt+Hwt, data=dat_train, size=50, decay=0.25, maxit=100, trace=FALSE)
+pred_nn <- predict(res_nn,dat_test)
+roc_nn <- roc(dat_test$Sex, as.numeric(pred_nn))
+
+library(kernlab)
+res_svm <- ksvm(as.matrix(dat_train[,2:3]),dat_train[,1],type="C-svc",kernel="rbfdot",kpar=list(sigma=1),C=5,scaled=FALSE,cross=5)
+pred_svm <- predict(res_svm,as.matrix(dat_test[,2:3]))
+roc_svm <- roc(dat_test$Sex, as.numeric(pred_svm))
+
+ggroc(list(NN=roc_nn,SVM=roc_svm),legacy.axes=TRUE)+xlab("FPR")+ylab("TPR")+ggtitle(paste("AUC =",round(roc_nn$auc,2)," ",round(roc_svm$auc,2)))+geom_segment(aes(x=0, xend=1, y=0, yend=1), color="blue", linetype="dashed")+theme_bw()
 
 
 </body>
