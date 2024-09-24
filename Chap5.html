@@ -79,8 +79,8 @@ rpart.plot(res_dt)        # treeによる分類結果を描画
 printcp(res_dt)       # cross validationによる最適なCP
 plotcp(res_dt)       # cross validationによるCPの変化プロット（CPは値の区間の幾何平均が使われているのでprintcpの値と違っている）
 
-library(pROC)
-pred_dt <- predict(res_dt,dat_test,type="prob")
+library(pROC)       # pROCパッケージを読み込む
+pred_dt <- predict(res_dt,dat_test,type="prob")        #
 roc_dt <- roc(dat_test$Sex, as.numeric(pred_dt[,2]))
 ggroc(roc_dt,legacy.axes=TRUE)+xlab("FPR")+ylab("TPR")+ggtitle(paste("AUC =",round(roc_dt$auc,2)))+geom_segment(aes(x=0, xend=1, y=0, yend=1), color="blue", linetype="dashed")+theme_bw()
 
