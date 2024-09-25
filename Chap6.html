@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+</head>
+ 
+<body>
+
+## 6 - 1 個体数推定のための調査手法
+
+possum <- read.csv("https://raw.githubusercontent.com/cran/PL.popN/master/data/possum.txt", sep=" ")       # インターネットネット上にあるpossum.txtを取り込む
+summary(possum)       # possumの中身を確認
+
+possum$n <- 5-possum$t1     # possumデータから二項分布の試行回数を作成
+possum$z <- possum$y-1      # possumデータから二項分布の成功回数を作成
+mod0 <- glm(cbind(z,n-z)~1,family=binomial,data=possum)      # 二項分布回帰を実行
+
+logit_p <- mod0$coefficients       # 二項分布回帰で推定された回帰係数
+ilogit <- function(x) exp(x)/(1+exp(x))         # logit値を逆変換して確率に戻す関数
+( p <- ilogit(logit_p) )       # possumの発見確率
+
+n <- nrow(possum)        # possumのサンプルサイズ
+( N <- n/p )        # サンプルサイズを発見確率で割ることで個体数を推定する
+
+library(tidyverse)
+mod1 <- glm(cbind(z,n-z)~x,family=binomial,data=possum) 
+mod2 <- glm(cbind(z,n-z)~x+I(x^2),family=binomial,data=possum)
+AIC(mod0, mod1, mod2)
+new_x <- 30:50
+new_possum <- data.frame(x=new_x,y=ilogit(predict(mod2,newdata=list(x=new_x))))
+ggplot(new_possum, aes(x,y))+geom_line()+labs(x="Body Weight (g)", y="Detection Probability")+theme_bw()
+
+</body>
+</html>
