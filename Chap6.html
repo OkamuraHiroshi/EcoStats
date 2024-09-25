@@ -23,12 +23,102 @@ n <- nrow(possum)        # possumのサンプルサイズ
 ( N <- n/p )        # サンプルサイズを発見確率で割ることで個体数を推定する
 
 library(tidyverse)        # tidyverseパッケージの読み込み
-mod1 <- glm(cbind(z,n-z)~x,family=binomial,data=possum) 
-mod2 <- glm(cbind(z,n-z)~x+I(x^2),family=binomial,data=possum)
-AIC(mod0, mod1, mod2)
-new_x <- 30:50
+mod1 <- glm(cbind(z,n-z)~x,family=binomial,data=possum)         # 体重量xを説明変数として二項分布回帰する
+mod2 <- glm(cbind(z,n-z)~x+I(x^2),family=binomial,data=possum)                 # 体重量xと体重量x^2を説明変数として二項分布回帰する
+AIC(mod0, mod1, mod2)          # 説明変数なし，説明変数x，説明変数x + x^2のモデルのAIC比較
+new_x <- 30:50         # グラフで予測曲線を描くためのx軸の値
 new_possum <- data.frame(x=new_x,y=ilogit(predict(mod2,newdata=list(x=new_x))))
-ggplot(new_possum, aes(x,y))+geom_line()+labs(x="Body Weight (g)", y="Detection Probability")+theme_bw()
+ggplot(new_possum, aes(x,y))+geom_line()+labs(x="Body Weight (g)", y="Detection Probability")+theme_bw()        # AIC最小のモデルmod2による予測結果のプロット
+
+pred_p <- ilogit(predict(mod2))     # mod2を使った場合の発見確率（体重により異なる）
+( N_new <- sum(1/pred_p) )        # 体重による発見確率の違いを考慮した個体数推定
+
+numeric_deriv <- function(mod, h=0.00001){
+  p <- mod$coef
+  X <- model.matrix(mod)
+  d <- h*diag(length(p))
+  (apply(d, 1, function(x) sum(1/ilogit(X%*%(p+x))))-apply(d, 1, function(x) sum(1/ilogit(X%*%(p-x)))))/(2*h)
+}
+var_N <- t(numeric_deriv(mod2))%*%vcov(mod2)%*%numeric_deriv(mod2)
+se_N <- sqrt(var_N)
+( cv_N <- se_N/N_new )
+
+alpha <- 1-0.95
+C_ln <- exp(qnorm(1-alpha/2)*sqrt(log(1+cv_N^2)))
+CI_ln <- c(N_new/C_ln, N_new*C_ln)
+round(CI_ln, 2)
+
+alpha <- 1-0.95
+Sim <- 2000
+N_b <- NULL
+set.seed(1)
+for (i in 1:Sim){
+  id <- sample(n, n, replace=TRUE)
+  mod2b <- glm(cbind(z,n-z)~x+I(x^2),family=binomial,dat=possum[id,])
+  pred_pb <- ilogit(predict(mod2b))
+  N_b <- c(N_b, sum(1/pred_pb)) 
+}
+CI_b <- quantile(N_b,probs=c(alpha/2,1-alpha/2))
+round(CI_b, 2)
+
+library(Rdistance)
+data("sparrowDetectionData")
+dat <- sparrowDetectionData
+dat <- dat %>% mutate(pd=as.numeric(dist))
+p1 <- ggplot(dat, aes(x=pd, y=..density..))+geom_histogram(position="identity",boundary=0,bins=15)+labs(x="Perpendicular Distance (m)")+theme_bw()
+print(p1)
+
+x_max <- 120
+dat <- dat %>% filter(pd <= 120)
+p1 <- ggplot(dat, aes(x=pd, y=..density..))+geom_histogram(position="identity",boundary=0, bins=15)+labs(x="Perpendicular Distance (m)")+theme_bw()
+g <- function(x,sigma) exp(-x^2/(2*sigma^2))
+log_like <- function(p, dat, x_max=Inf){
+  x <- dat$pd
+  x <- x[x <= x_max]
+  sigma <- exp(p)
+#  w <- integrate(g,0,w,sigma=sigma)$value
+  w <- sqrt(2*pi)*sigma*(pnorm(x_max,0,sigma)-pnorm(0,0,sigma))
+  -sum(log(g(x,sigma))-log(w))
+}
+init_p <- log(mean(dat$pd))
+mod <- nlm(log_like, init_p, dat=dat, x_max=x_max, hessian=TRUE)
+sigma <- exp(mod$estimate)
+x <- seq(0,x_max)
+esw <- function(sigma, x_max=Inf) sqrt(2*pi)*sigma*(pnorm(x_max,0,sigma)-pnorm(0,0,sigma))
+w <- esw(sigma, x_max)
+dat1 <- layer_data(p1)
+pred <- sapply(1:nrow(dat1), function(i) sqrt(2*pi)*sigma*(pnorm(dat1$xmax[i],0,sigma)-pnorm(dat1$xmin[i],0,sigma)))
+pred1 <- pred/sum(pred)*sum(dat1$y)
+p2 <- p1 + geom_line(data=dat1, aes(x=x,y=pred1), color="blue")
+print(p2)
+
+data(sparrowSiteData)
+dat_s <- sparrowSiteData
+L <- sum(as.numeric(dat_s$length))
+n <- nrow(dat)
+A <- 4105*1000^2
+( N <- A*n/(2*L*w) )
+
+numeric_deriv <- function(mod, h=0.00001){
+  p <- mod$estimate
+  d <- h*diag(length(p))
+  (apply(d, 1, function(x) esw(exp(p+x)))-apply(d, 1, function(x) esw(exp(p-x))))/(2*h)
+}
+var_w <- t(numeric_deriv(mod))%*%(1/mod$hessian)%*%numeric_deriv(mod)
+cv_w <- sqrt(var_w)/w
+k <- nrow(dat_s)
+n <- tapply(dat$dist, dat$siteID, length)
+n[is.na(n)] <- 0
+l <- as.numeric(dat_s$length)
+mean_nl <- sum(n)/L
+var_nl <- 1/(k-1)*sum(l/L*(n/l-mean_nl)^2)
+cv_nl <- sqrt(var_nl)/mean_nl
+cv_N <- sqrt(cv_nl^2+cv_w^2)
+C_ln <- exp(qnorm(1-0.05/2)*sqrt(log(1+cv_N^2)))
+CI_ln <- c(N/C_ln, N*C_ln)
+round(CI_ln, 2)
+
+## 6 - 2　占有モデル
 
 </body>
 </html>
