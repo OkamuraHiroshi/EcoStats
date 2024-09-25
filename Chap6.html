@@ -33,11 +33,11 @@ ggplot(new_possum, aes(x,y))+geom_line()+labs(x="Body Weight (g)", y="Detection 
 pred_p <- ilogit(predict(mod2))     # mod2を使った場合の発見確率（体重により異なる）
 ( N_new <- sum(1/pred_p) )        # 体重による発見確率の違いを考慮した個体数推定
 
-numeric_deriv <- function(mod, h=0.00001){
-  p <- mod$coef
-  X <- model.matrix(mod)
-  d <- h*diag(length(p))
-  (apply(d, 1, function(x) sum(1/ilogit(X%*%(p+x))))-apply(d, 1, function(x) sum(1/ilogit(X%*%(p-x)))))/(2*h)
+numeric_deriv <- function(mod, h=0.00001){     # 個体数推定値のパラメータによる微分を計算する関数
+  p <- mod$coef      # 回帰のパラメータ
+  X <- model.matrix(mod)        # 説明変数
+  d <- h*diag(length(p))        # 数値微分のために回帰係数に足し引きする微小量を与える
+  (apply(d, 1, function(x) sum(1/ilogit(X%*%(p+x))))-apply(d, 1, function(x) sum(1/ilogit(X%*%(p-x)))))/(2*h)      # 各パラメータに対する個体数推定値の微分
 }
 var_N <- t(numeric_deriv(mod2))%*%vcov(mod2)%*%numeric_deriv(mod2)
 se_N <- sqrt(var_N)
