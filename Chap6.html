@@ -120,5 +120,12 @@ round(CI_ln, 2)
 
 ## 6 - 2　占有モデル
 
+library(unmarked)
+data(crossbill)
+dat <- crossbill[, 1:7]
+dat$n <- apply(dat[,5:7],1,function(x) sum(!is.na(x)))
+dat$x <- apply(dat[,5:7],1,sum,na.rm=TRUE)
+dat <- dat[dat$n > 0, ]
+
 </body>
 </html>
