@@ -22,7 +22,7 @@ ilogit <- function(x) exp(x)/(1+exp(x))         # logit値を逆変換して確�
 n <- nrow(possum)        # possumのサンプルサイズ
 ( N <- n/p )        # サンプルサイズを発見確率で割ることで個体数を推定する
 
-library(tidyverse)
+library(tidyverse)        # tidyverseパッケージの読み込み
 mod1 <- glm(cbind(z,n-z)~x,family=binomial,data=possum) 
 mod2 <- glm(cbind(z,n-z)~x+I(x^2),family=binomial,data=possum)
 AIC(mod0, mod1, mod2)
