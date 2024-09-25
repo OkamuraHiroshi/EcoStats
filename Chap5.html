@@ -140,17 +140,17 @@ ggroc(roc_xgb,legacy.axes=TRUE)+xlab("FPR")+ylab("TPR")+ggtitle(paste("AUC =",ro
 
 ## 5 - 7 その他の非線形回帰手法
 
-library(nnet)
-res_nn <- nnet(sex~Bwt+Hwt, data=dat_train, size=50, decay=0.25, maxit=100, trace=FALSE)
-pred_nn <- predict(res_nn,dat_test)
-roc_nn <- roc(dat_test$Sex, as.numeric(pred_nn))
+library(nnet)       # nnetパッケージの読み込み
+res_nn <- nnet(sex~Bwt+Hwt, data=dat_train, size=50, decay=0.25, maxit=100, trace=FALSE)       # ニューラルネットの適用
+pred_nn <- predict(res_nn,dat_test)        # ニューラルネットによる予測値
+roc_nn <- roc(dat_test$Sex, as.numeric(pred_nn))        # ニューラルネットのROCアウトプット
 
-library(kernlab)
-res_svm <- ksvm(as.matrix(dat_train[,2:3]),dat_train[,1],type="C-svc",kernel="rbfdot",kpar=list(sigma=1),C=5,scaled=FALSE,cross=5)
-pred_svm <- predict(res_svm,as.matrix(dat_test[,2:3]))
-roc_svm <- roc(dat_test$Sex, as.numeric(pred_svm))
+library(kernlab)      # kernlabパッケージの読み込み
+res_svm <- ksvm(as.matrix(dat_train[,2:3]),dat_train[,1],type="C-svc",kernel="rbfdot",kpar=list(sigma=1),C=5,scaled=FALSE,cross=5)       # サポートベクターマシンのフィッティング
+pred_svm <- predict(res_svm,as.matrix(dat_test[,2:3]))       # サポートベクターマシンによる予測値
+roc_svm <- roc(dat_test$Sex, as.numeric(pred_svm))         # サポートベクターマシンのROCアウトプット
 
-ggroc(list(NN=roc_nn,SVM=roc_svm),legacy.axes=TRUE)+xlab("FPR")+ylab("TPR")+ggtitle(paste("AUC =",round(roc_nn$auc,2)," ",round(roc_svm$auc,2)))+geom_segment(aes(x=0, xend=1, y=0, yend=1), color="blue", linetype="dashed")+theme_bw()
+ggroc(list(NN=roc_nn,SVM=roc_svm),legacy.axes=TRUE)+xlab("FPR")+ylab("TPR")+ggtitle(paste("AUC =",round(roc_nn$auc,2)," ",round(roc_svm$auc,2)))+geom_segment(aes(x=0, xend=1, y=0, yend=1), color="blue", linetype="dashed")+theme_bw()       # ニューラルネットとサポートベクターマシンのROC曲線とAUC
 
 </body>
 </html>
