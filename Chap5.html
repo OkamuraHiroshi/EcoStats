@@ -131,12 +131,12 @@ roc_sgb <- roc(dat_test$Sex, as.numeric(pred_sgb))       # 確率的勾配ブー
 ggroc(list(Ada_boost=roc_ab,Gradient_boost=roc_gb,Stochastic_gradient_boost=roc_sgb),legacy.axes=TRUE)+xlab("FPR")+ylab("TPR")+ggtitle(paste("AUC =",round(roc_ab$auc,2)," ",round(roc_gb$auc,2)," ",round(roc_sgb$auc,2)))+geom_segment(aes(x=0, xend=1, y=0, yend=1), color="brown", linetype="dashed")+theme_bw()        # adaboost, 勾配ブースティング，確率的勾配ブースティングのROC曲線とAUCの比較
 
 library(xgboost)       # xgboostパッケージの読み込み
-res_xgb_cv <- xgb.cv(param=list("objective" = "binary:logistic"), data = as.matrix(dat_train[,2:3]), label = dat_train$sex, nfold = 5, subsample=0.5, eta=0.1, nrounds=100, verbose=0)
-nround_xgb <- which.min(res_xgb_cv$evaluation_log[[4]])+1
-res_xgb <- xgboost(param=list("objective" = "binary:logistic"), data = as.matrix(dat_train[,2:3]), label = dat_train$sex, subsample=0.5, eta=0.1, nrounds=nround_xgb, verbose=0)
-pred_xgb <- predict(res_xgb,as.matrix(dat_test[,2:3]),type="response")
-roc_xgb <- roc(dat_test$Sex, as.numeric(pred_xgb))
-ggroc(roc_xgb,legacy.axes=TRUE)+xlab("FPR")+ylab("TPR")+ggtitle(paste("AUC =",round(roc_xgb$auc,2)))+geom_segment(aes(x=0, xend=1, y=0, yend=1), color="blue", linetype="dashed")+theme_bw()
+res_xgb_cv <- xgb.cv(param=list("objective" = "binary:logistic"), data = as.matrix(dat_train[,2:3]), label = dat_train$sex, nfold = 5, subsample=0.5, eta=0.1, nrounds=100, verbose=0)       # xgboostに対するクロスバリデーションを実行
+nround_xgb <- which.min(res_xgb_cv$evaluation_log[[4]])+1       # 上のCV結果に基づきxgboostパラメータの簡易チューニング
+res_xgb <- xgboost(param=list("objective" = "binary:logistic"), data = as.matrix(dat_train[,2:3]), label = dat_train$sex, subsample=0.5, eta=0.1, nrounds=nround_xgb, verbose=0)         # 最適チューニングパラメータを使用してxgboostを再実行
+pred_xgb <- predict(res_xgb,as.matrix(dat_test[,2:3]),type="response")         # xgboostによるテストデータの予測
+roc_xgb <- roc(dat_test$Sex, as.numeric(pred_xgb))        # xgboost結果に対するROC曲線のためのアウトプット生成
+ggroc(roc_xgb,legacy.axes=TRUE)+xlab("FPR")+ylab("TPR")+ggtitle(paste("AUC =",round(roc_xgb$auc,2)))+geom_segment(aes(x=0, xend=1, y=0, yend=1), color="blue", linetype="dashed")+theme_bw()       # xgboostのROC曲線描画とAUC
 
 ## 5 - 7 その他の非線形回帰手法
 
@@ -151,7 +151,6 @@ pred_svm <- predict(res_svm,as.matrix(dat_test[,2:3]))
 roc_svm <- roc(dat_test$Sex, as.numeric(pred_svm))
 
 ggroc(list(NN=roc_nn,SVM=roc_svm),legacy.axes=TRUE)+xlab("FPR")+ylab("TPR")+ggtitle(paste("AUC =",round(roc_nn$auc,2)," ",round(roc_svm$auc,2)))+geom_segment(aes(x=0, xend=1, y=0, yend=1), color="blue", linetype="dashed")+theme_bw()
-
 
 </body>
 </html>
