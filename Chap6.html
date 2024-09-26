@@ -39,16 +39,16 @@ numeric_deriv <- function(mod, h=0.00001){     # 個体数推定値のパラメ�
   d <- h*diag(length(p))        # 数値微分のために回帰係数に足し引きする微小量を与える
   (apply(d, 1, function(x) sum(1/ilogit(X%*%(p+x))))-apply(d, 1, function(x) sum(1/ilogit(X%*%(p-x)))))/(2*h)      # 各パラメータに対する個体数推定値の微分
 }
-var_N <- t(numeric_deriv(mod2))%*%vcov(mod2)%*%numeric_deriv(mod2)
-se_N <- sqrt(var_N)
-( cv_N <- se_N/N_new )
+var_N <- t(numeric_deriv(mod2))%*%vcov(mod2)%*%numeric_deriv(mod2)       # デルタ法による個体数の近似分散
+se_N <- sqrt(var_N)        # 個体数の標準誤差
+( cv_N <- se_N/N_new )       # 個体数の変動係数
 
-alpha <- 1-0.95
-C_ln <- exp(qnorm(1-alpha/2)*sqrt(log(1+cv_N^2)))
-CI_ln <- c(N_new/C_ln, N_new*C_ln)
-round(CI_ln, 2)
+alpha <- 1-0.95        # 有意水準の設定
+C_ln <- exp(qnorm(1-alpha/2)*sqrt(log(1+cv_N^2)))       # 対数正規分布の近似信頼区間で使用する値
+CI_ln <- c(N_new/C_ln, N_new*C_ln)        # 対数正規分布の信頼区間
+round(CI_ln, 2)       # 信頼区間を表示
 
-alpha <- 1-0.95
+alpha <- 1-0.95       # 有意水準の設定
 Sim <- 2000
 N_b <- NULL
 set.seed(1)
