@@ -106,23 +106,23 @@ numeric_deriv <- function(mod, h=0.00001){       # 有効探索幅のパラメ�
 }
 var_w <- t(numeric_deriv(mod))%*%(1/mod$hessian)%*%numeric_deriv(mod)       # デルタ法による有効探索幅の分散の計算
 cv_w <- sqrt(var_w)/w        # 有効探索幅の変動係数
-k <- nrow(dat_s)        # 
-n <- tapply(dat$dist, dat$siteID, length)
-n[is.na(n)] <- 0
-l <- as.numeric(dat_s$length)
-mean_nl <- sum(n)/L
-var_nl <- 1/(k-1)*sum(l/L*(n/l-mean_nl)^2)
-cv_nl <- sqrt(var_nl)/mean_nl
-cv_N <- sqrt(cv_nl^2+cv_w^2)
-C_ln <- exp(qnorm(1-0.05/2)*sqrt(log(1+cv_N^2)))
-CI_ln <- c(N/C_ln, N*C_ln)
-round(CI_ln, 2)
+k <- nrow(dat_s)        # 調査ラインの数
+n <- tapply(dat$dist, dat$siteID, length)      # ラインごとの発見数
+n[is.na(n)] <- 0       # そのラインに発見がない場合，NAを発見数=0にする
+l <- as.numeric(dat_s$length)        # 各ラインの長さ
+mean_nl <- sum(n)/L         # 全ラインあたりの発見数（遭遇率）
+var_nl <- 1/(k-1)*sum(l/L*(n/l-mean_nl)^2)         # 遭遇率のライン重み付き分散
+cv_nl <- sqrt(var_nl)/mean_nl       # 遭遇率の変動係数
+cv_N <- sqrt(cv_nl^2+cv_w^2)       # 遭遇率の変動係数の二乗と有効探索幅の変動係数の二乗を合わせて平方根をとることにより個体数の変動係数を計算
+C_ln <- exp(qnorm(1-0.05/2)*sqrt(log(1+cv_N^2)))        # 対数正規信頼区間に必要な定数
+CI_ln <- c(N/C_ln, N*C_ln)       # 対数正規分布を仮定した信頼区間
+round(CI_ln, 2)       # 信頼区間の表示
 
 ## 6 - 2　占有モデル
 
-library(unmarked)
-data(crossbill)
-dat <- crossbill[, 1:7]
+library(unmarked)        # unmarkedパッケージの読み込み
+data(crossbill)         # crossbillデータの読み込み
+dat <- crossbill[, 1:7]          # crossbillデータをdatにコピー
 dat$n <- apply(dat[,5:7],1,function(x) sum(!is.na(x)))
 dat$x <- apply(dat[,5:7],1,sum,na.rm=TRUE)
 dat <- dat[dat$n > 0, ]
