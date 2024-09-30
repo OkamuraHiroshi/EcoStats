@@ -49,36 +49,36 @@ CI_ln <- c(N_new/C_ln, N_new*C_ln)        # 対数正規分布の信頼区間
 round(CI_ln, 2)       # 信頼区間を表示
 
 alpha <- 1-0.95       # 有意水準の設定
-Sim <- 2000
-N_b <- NULL
-set.seed(1)
+Sim <- 2000       # シミュレーションの回数
+N_b <- NULL       # bootstrap sampleに対する個体数推定値
+set.seed(1)       # 乱数発生のseed設定
 for (i in 1:Sim){
-  id <- sample(n, n, replace=TRUE)
-  mod2b <- glm(cbind(z,n-z)~x+I(x^2),family=binomial,dat=possum[id,])
-  pred_pb <- ilogit(predict(mod2b))
-  N_b <- c(N_b, sum(1/pred_pb)) 
+  id <- sample(n, n, replace=TRUE)        # n個からn個を復元抽出でリサンプル
+  mod2b <- glm(cbind(z,n-z)~x+I(x^2),family=binomial,dat=possum[id,])       # bootsrapサンプルデータに対して2次の共変量を持つ二項回帰モデルをフィット
+  pred_pb <- ilogit(predict(mod2b))        # 発見確率の推定
+  N_b <- c(N_b, sum(1/pred_pb))         # bootstrapによる個体数推定値を保存
 }
-CI_b <- quantile(N_b,probs=c(alpha/2,1-alpha/2))
-round(CI_b, 2)
+CI_b <- quantile(N_b,probs=c(alpha/2,1-alpha/2))       # percentile法による信頼区間
+round(CI_b, 2)        # 信頼区間の表示
 
-library(Rdistance)
-data("sparrowDetectionData")
-dat <- sparrowDetectionData
-dat <- dat %>% mutate(pd=as.numeric(dist))
-p1 <- ggplot(dat, aes(x=pd, y=..density..))+geom_histogram(position="identity",boundary=0,bins=15)+labs(x="Perpendicular Distance (m)")+theme_bw()
-print(p1)
+library(Rdistance)          # Rdistanceパッケージの読み込み
+data("sparrowDetectionData")         # sparrowDetectionDataの読み込み
+dat <- sparrowDetectionData          # sparrowDetectionDataをdatにコピー
+dat <- dat %>% mutate(pd=as.numeric(dist))         # pd（垂直横距離を数値化したもの）を新しい変数として追加
+p1 <- ggplot(dat, aes(x=pd, y=..density..))+geom_histogram(position="identity",boundary=0,bins=15)+labs(x="Perpendicular Distance (m)")+theme_bw()      # 垂直横距離の確率分布の図
+print(p1)       # 図を表示
 
-x_max <- 120
-dat <- dat %>% filter(pd <= 120)
-p1 <- ggplot(dat, aes(x=pd, y=..density..))+geom_histogram(position="identity",boundary=0, bins=15)+labs(x="Perpendicular Distance (m)")+theme_bw()
-g <- function(x,sigma) exp(-x^2/(2*sigma^2))
-log_like <- function(p, dat, x_max=Inf){
+x_max <- 120       # 横距離の最大値
+dat <- dat %>% filter(pd <= 120)       # 横距離を120m以下のものに制限する
+p1 <- ggplot(dat, aes(x=pd, y=..density..))+geom_histogram(position="identity",boundary=0, bins=15)+labs(x="Perpendicular Distance (m)")+theme_bw()      # 横距離の確率分布の図
+g <- function(x,sigma) exp(-x^2/(2*sigma^2))       # 半正規分布の発見関数
+log_like <- function(p, dat, x_max=Inf){        #
   x <- dat$pd
   x <- x[x <= x_max]
   sigma <- exp(p)
-#  w <- integrate(g,0,w,sigma=sigma)$value
-  w <- sqrt(2*pi)*sigma*(pnorm(x_max,0,sigma)-pnorm(0,0,sigma))
-  -sum(log(g(x,sigma))-log(w))
+#  w <- integrate(g,0,w,sigma=sigma)$value        # 有効探索幅の計算（一般には解析的に求められないので，数値積分などで計算する．発見関数が半正規分布の場合は，pnormで計算可能）
+  w <- sqrt(2*pi)*sigma*(pnorm(x_max,0,sigma)-pnorm(0,0,sigma))       # 発見関数が半正規分布のときの有効探索幅
+  -sum(log(g(x,sigma))-log(w))       # 横距離データに対する負の対数尤度
 }
 init_p <- log(mean(dat$pd))
 mod <- nlm(log_like, init_p, dat=dat, x_max=x_max, hessian=TRUE)
