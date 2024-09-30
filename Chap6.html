@@ -92,21 +92,21 @@ pred1 <- pred/sum(pred)*sum(dat1$y)        # グラフで観測度数と予測�
 p2 <- p1 + geom_line(data=dat1, aes(x=x,y=pred1), color="blue")      # 横距離の元の観測値頻度グラフにモデルから予測された曲線を追加フィットするグラフ
 print(p2)        # グラフ描画
 
-data(sparrowSiteData)
-dat_s <- sparrowSiteData
-L <- sum(as.numeric(dat_s$length))
-n <- nrow(dat)
-A <- 4105*1000^2
-( N <- A*n/(2*L*w) )
+data(sparrowSiteData)        # 発見場所に関するライントランセクト調査データ
+dat_s <- sparrowSiteData         # sparrowSiteDataをdat_sにコピー
+L <- sum(as.numeric(dat_s$length))         # 調査の総距離
+n <- nrow(dat)       # 総発見数
+A <- 4105*1000^2         # 調査面積（?sparrowSiteDataから情報を得る）
+( N <- A*n/(2*L*w) )        # 個体数推定値
 
-numeric_deriv <- function(mod, h=0.00001){
-  p <- mod$estimate
-  d <- h*diag(length(p))
-  (apply(d, 1, function(x) esw(exp(p+x)))-apply(d, 1, function(x) esw(exp(p-x))))/(2*h)
+numeric_deriv <- function(mod, h=0.00001){       # 有効探索幅のパラメータによる数値微分を行う関数
+  p <- mod$estimate      # 最適化で推定されたパラメータ
+  d <- h*diag(length(p))         # 数値微分のための微小量の設定
+  (apply(d, 1, function(x) esw(exp(p+x)))-apply(d, 1, function(x) esw(exp(p-x))))/(2*h)       # 数値微分
 }
-var_w <- t(numeric_deriv(mod))%*%(1/mod$hessian)%*%numeric_deriv(mod)
-cv_w <- sqrt(var_w)/w
-k <- nrow(dat_s)
+var_w <- t(numeric_deriv(mod))%*%(1/mod$hessian)%*%numeric_deriv(mod)       # デルタ法による有効探索幅の分散の計算
+cv_w <- sqrt(var_w)/w        # 有効探索幅の変動係数
+k <- nrow(dat_s)        # 
 n <- tapply(dat$dist, dat$siteID, length)
 n[is.na(n)] <- 0
 l <- as.numeric(dat_s$length)
