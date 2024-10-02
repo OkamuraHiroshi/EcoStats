@@ -210,14 +210,24 @@ cpue_dat <- read.csv(unzip(temp))         # tempを解凍して，中のcsvフ�
 YFT_dat <- cpue_dat[,c(1:12,13:15)]          # 必要なデータの抽出
 YFT_dat$Catch <- apply(YFT_dat[,13:15],1,sum,na.rm=TRUE)         # 漁獲量の列を作成
 dat <- subset(YFT_dat, Year >= 2000 & substr(YFT_dat$Fleet,1,3)=="JPN")        # 2000年以降日本が漁獲したデータに限定してdatとする
-dat$Year <- factor(dat$Year)
-dat$Month <- (dat$MonthStart+dat$MonthEnd)/2
-dat$Month <- factor(dat$Month)
-dat$Grid <- factor(dat$Grid)
-mod_td0 <- glmmTMB(Catch~ Year-1,offset=log(Effort),family=tweedie,data=dat)
-mod_td1 <- glmmTMB(Catch~ Year+(1|Month)+(1|Grid)-1,offset=log(Effort),family=tweedie,data=dat)
-mod_td2 <- glmmTMB(Catch~ Year+(1|Month)+(1|Grid)+(1|Year:Month)+(1|Year:Grid)-1,offset=log(Effort),family=tweedie,data=dat)
-AIC(mod_td0,mod_td1,mod_td2)
+dat$Year <- factor(dat$Year)       # 年の情報をカテゴリーにする（年による非線形なトレンドをとらえるため，CPUE標準化ではよくやられる）
+dat$Month <- (dat$MonthStart+dat$MonthEnd)/2      # 開始月と終了月の記録があるので，平均したものを月とする
+dat$Month <- factor(dat$Month)       # 月をカテゴリーにする
+dat$Grid <- factor(dat$Grid)       # 漁獲場所が数字で与えられているので，これもカテゴリーにする
+mod_td0 <- glmmTMB(Catch~ Year-1,offset=log(Effort),family=tweedie,data=dat)       # 誤差分布をTweedieにして，努力量の対数値をoffsetにし，年の効果だけを考慮したモデル（-1することで切片を除く）
+mod_td1 <- glmmTMB(Catch~ Year+(1|Month)+(1|Grid)-1,offset=log(Effort),family=tweedie,data=dat)        # 上と同じ設定で，月と場所をランダム効果にして加えたモデル
+mod_td2 <- glmmTMB(Catch~ Year+(1|Month)+(1|Grid)+(1|Year:Month)+(1|Year:Grid)-1,offset=log(Effort),family=tweedie,data=dat)         # 上と同じ設定で，月と場所，年と月の交互作用，年と場所の交互作用をランダム効果にして加えたモデル
+AIC(mod_td0,mod_td1,mod_td2)        # 3つのモデルのAICを比較
+
+pred0 <- exp(mod_td0$fit$parfull[names(mod_td0$fit$parfull)=="beta"])
+pred1 <- exp(mod_td1$fit$parfull[names(mod_td1$fit$parfull)=="beta"])
+pred2 <- exp(mod_td2$fit$parfull[names(mod_td2$fit$parfull)=="beta"])
+pred0 <- pred0/mean(pred0)
+pred1 <- pred1/mean(pred1)
+pred2 <- pred2/mean(pred2)
+Year <- as.numeric(as.character(unique(dat$Year)))
+dat_for_plot <- data.frame(Year=rep(Year,3), Model=factor(rep(0:2, each=length(Year))), CPUE=c(pred0,pred1,pred2))
+ggplot(dat_for_plot, aes(x=Year, y=CPUE, linetype=Model))+geom_line()+theme_bw()
 
 
 
