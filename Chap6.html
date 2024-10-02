@@ -171,44 +171,45 @@ round(CI_ln, 2)       # 信頼区間表示
 ## 6 - 3　相対資源量指数
 
 # CPUE標準化の重要性を示すシミュレーション
+set.seed(1)       # 乱数発生のseed設定
 a <- exp(-0.2); log_a <- log(a)       # a（年による減少率）とその対数
-Y <- 30; Sim <- 100; SS <- 5; sigma <- 0.4; q <- c(0.1, 0.9)       # パラメータ設定（Y：年数，Sim：シミュレーション回数，SS：各年の観測数，sigma：
-Year <- rep(rev(2022-(0:(Y-1))), each=SS)
-n <- matrix(NA, nrow=Y, ncol=Sim)
-cpue <- log_q <- matrix(NA, nrow=Y*SS, ncol=Sim)
-n[1,] <- rnorm(Sim,0,1)
-eps <- matrix(sigma*rnorm(Y*SS*Sim),nrow=Y*SS,ncol=Sim)
-p <- function(i) 1/(1+exp(-(i-Y/2)/5))
-Location <- sapply(rep(1:Y,each=SS), function(i) rbinom(Sim, 1, p(i)))
-log_q <- log(t(matrix(q[Location+1],nrow=Sim,ncol=Y*SS))); Location <- t(Location)
-cpue[1:SS,] <- log_q[1:SS,] + n[1,] + eps[1:SS,]
+Y <- 30; Sim <- 100; SS <- 5; sigma <- 0.4; q <- c(0.1, 0.9)       # パラメータ設定（Y：年数，Sim：シミュレーション回数，SS：各年の観測数，sigma：CPUEの対数値の標準偏差，q：東西の漁獲効率
+Year <- rep(rev(2022-(0:(Y-1))), each=SS)      # 1993年から2022年まで30年間の年ラベル（各年5個ずつ）
+n <- matrix(NA, nrow=Y, ncol=Sim)        # 個体数の対数値の入れ物となる行列
+cpue <- log_q <- matrix(NA, nrow=Y*SS, ncol=Sim)        # CPUEと漁具能率の対数値の行列
+n[1,] <- rnorm(Sim,0,1)         # 1年前の個体数
+eps <- matrix(sigma*rnorm(Y*SS*Sim),nrow=Y*SS,ncol=Sim)       # cpueの観測誤差
+p <- function(i) 1/(1+exp(-(i-Y/2)/5))       # 西側で漁獲を行う確率（年によって変化する）
+Location <- sapply(rep(1:Y,each=SS), function(i) rbinom(Sim, 1, p(i)))       # 上で定義した確率で選択された漁獲を行う場所（Locationは，行数がSim，列数がY*SSになっている）
+log_q <- log(t(matrix(q[Location+1],nrow=Sim,ncol=Y*SS))); Location <- t(Location)      # 東西場所選択に対応したqの選択とlog_qの作成（転置して，Y*SS行Sim列に）．後のために，Locationも転置してY*SS行Sim列の行列に．
+cpue[1:SS,] <- log_q[1:SS,] + n[1,] + eps[1:SS,]        # 最初の年のCPUE
 for (i in 1:(Y-1)){
-  n[i+1,] <- log_a+n[i,]
-  cpue[i*SS+(1:SS),] <- log_q[i*SS+1:SS,] + n[i+1,] + eps[i*SS+1:SS,]
+  n[i+1,] <- log_a+n[i,]       # i年のCPUE（年率aで減少していっている）
+  cpue[i*SS+(1:SS),] <- log_q[i*SS+1:SS,] + n[i+1,] + eps[i*SS+1:SS,]        # 個体数に漁獲効率qを掛け，誤差を付与してcpue（対数値）を作成
 }
-p1 <- ggplot(data=data.frame(Year=unique(Year), Prob=p(1:Y)),aes(x=Year,y=Prob))+geom_line(color="blue",linewidth=2)+labs(y="Probability of Selecting q = 0.9")+theme_bw()
-WE <- c("East","West")
-Loc <- WE[Location[,1]+1]
-dat_for_gg <- data.frame(Year=rep(unique(Year),each=SS), num=rep(1:SS,len=nrow(cpue)), Location=Loc, CPUE=cpue[,1])
-p2 <- ggplot(dat_for_gg, aes(x=Year, y=CPUE, color=Location))+labs(y="log(CPUE)")+geom_point()+theme_bw()+theme(legend.position = c(0.1, 0.25))
-cowplot::plot_grid(p1,p2,nrow=2,align="v")
+p1 <- ggplot(data=data.frame(Year=unique(Year), Prob=p(1:Y)),aes(x=Year,y=Prob))+geom_line(color="blue",linewidth=2)+labs(y="Probability of Selecting q = 0.9")+theme_bw()        # 年による場所選択率の変化の様子（年が進むと西に行きやすくなる）
+WE <- c("East","West")       # 東西のラベル
+Loc <- WE[Location[,1]+1]         # 選択された場所が東西どちらだったか
+dat_for_gg <- data.frame(Year=rep(unique(Year),each=SS), num=rep(1:SS,len=nrow(cpue)), Location=Loc, CPUE=cpue[,1])        # プロットに必要なデータをまとめる
+p2 <- ggplot(dat_for_gg, aes(x=Year, y=CPUE, color=Location))+labs(y="log(CPUE)")+geom_point()+theme_bw()+theme(legend.position = c(0.1, 0.25))         # 年に対するCPUEの対数値をプロット（東西どちらで漁獲を行っていたかを色の違いで描画）
+cowplot::plot_grid(p1,p2,nrow=2,align="v")         # 上で作った選択率変化のグラフとCPUE変化の様子を上下に並べて表示
 
-res_nom <- lapply(1:Sim, function(i) lm(cpue[,i]~Year))
-res_std <- lapply(1:Sim, function(i) lm(cpue[,i]~Year*Location[,i]))
-dat_for_gg2 <- data.frame(Model=c(rep(c("Nominal","Standardized"),each=Sim)), Trend=c(sapply(1:Sim, function(i) res_nom[[i]]$coef[2]), sapply(1:Sim, function(i) res_std[[i]]$coef[2])))
-ggplot(dat_for_gg2,aes(x=Model,y=Trend))+geom_boxplot()+geom_hline(yintercept=-0.2,linetype="dashed")+theme_bw()
+res_nom <- lapply(1:Sim, function(i) lm(cpue[,i]~Year))       # 場所の変化による漁獲効率の違いを無視して減少率を推定するモデル
+res_std <- lapply(1:Sim, function(i) lm(cpue[,i]~Year*Location[,i]))         # 年と場所の交互作用を考えることにより，年による場所の違いを考慮に入れたモデル
+dat_for_gg2 <- data.frame(Model=c(rep(c("Nominal","Standardized"),each=Sim)), Trend=c(sapply(1:Sim, function(i) res_nom[[i]]$coef[2]), sapply(1:Sim, function(i) res_std[[i]]$coef[2])))       # 2つのモデルから推定された減少率の推定値を並べる
+ggplot(dat_for_gg2,aes(x=Model,y=Trend))+geom_boxplot()+geom_hline(yintercept=log_a,linetype="dashed")+theme_bw()      # 2つのモデルによって推定された減少率の対数値と真の減少率の対数値を比較
 
-library(glmmTMB)
-library(rvest)
-library(stringr)
-html <- read_html("https://iotc.org/data/datasets/latest/CE/Longline")
-zip_loc <- html %>% html_elements("a") %>% html_attr("href") %>% str_subset("\\.zip")
-temp <- tempfile()
-download.file(zip_loc, temp)
-cpue_dat <- read.csv(unzip(temp))
-YFT_dat <- cpue_dat[,c(1:12,13:15)]
-YFT_dat$Catch <- apply(YFT_dat[,13:15],1,sum,na.rm=TRUE)
-dat <- subset(YFT_dat, Year >= 2000 & substr(YFT_dat$Fleet,1,3)=="JPN")
+library(glmmTMB)       # glmmTMBパッケージの読み込み
+library(rvest)       # rvestパッケージの読み込み
+library(stringr)       # stringrパッケージの読み込み
+html <- read_html("https://iotc.org/data/datasets/latest/CE/Longline")       # はえ縄で漁獲されたまぐろの漁獲情報が載っているウェブサイトの場所
+zip_loc <- html %>% html_elements("a") %>% html_attr("href") %>% str_subset("\\.zip")       # 上記ウェブサイトにあるzipファイルを抽出
+temp <- tempfile()      # 空のファイル名を設定
+download.file(zip_loc, temp)        # zipファイルをtempとしてダウンロード
+cpue_dat <- read.csv(unzip(temp))         # tempを解凍して，中のcsvファイルを読み込む
+YFT_dat <- cpue_dat[,c(1:12,13:15)]          # 必要なデータの抽出
+YFT_dat$Catch <- apply(YFT_dat[,13:15],1,sum,na.rm=TRUE)         # 漁獲量の列を作成
+dat <- subset(YFT_dat, Year >= 2000 & substr(YFT_dat$Fleet,1,3)=="JPN")        # 2000年以降日本が漁獲したデータに限定してdatとする
 dat$Year <- factor(dat$Year)
 dat$Month <- (dat$MonthStart+dat$MonthEnd)/2
 dat$Month <- factor(dat$Month)
