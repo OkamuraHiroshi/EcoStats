@@ -123,9 +123,101 @@ round(CI_ln, 2)       # 信頼区間の表示
 library(unmarked)        # unmarkedパッケージの読み込み
 data(crossbill)         # crossbillデータの読み込み
 dat <- crossbill[, 1:7]          # crossbillデータをdatにコピー
-dat$n <- apply(dat[,5:7],1,function(x) sum(!is.na(x)))
-dat$x <- apply(dat[,5:7],1,sum,na.rm=TRUE)
-dat <- dat[dat$n > 0, ]
+dat$n <- apply(dat[,5:7],1,function(x) sum(!is.na(x)))        # 調査の回数（基本は3回調査だが，全く調査がされていなかったり，最後の調査が欠測していて2回だけとなっている場合もある）
+dat$x <- apply(dat[,5:7],1,sum,na.rm=TRUE)       # 発見があった調査の個数
+dat <- dat[dat$n > 0, ]       # 調査回数が正のデータだけとってくる
+
+loglik <- function(p, dat){         # （負の）対数尤度関数
+  psi <- exp(p[1])        # 存在確率
+  theta <- exp(p[2])        # 発見確率
+  n <- dat$n       # 調査回数
+  x <- dat$x       # 調査のうち発見があった回数
+  -sum(log(dbinom(x,n,theta)*psi+ifelse(x==0,1,0)*(1-psi)),na.rm=TRUE)      # 負の対数尤度（存在していたら発見があったときに観測されるが，存在していなかったら発見もなし：0は膨らませられている）
+}
+mod <- nlm(loglik,c(-1,-1),dat)       # 最適化（負の対数尤度を最小にするパラメータを探索）
+psi <- exp(mod$estimate[1])        # 存在確率
+theta <- exp(mod$estimate[2])        # 発見確率
+( parms <- c(psi=psi, theta=theta) )         # 推定パラメータをまとめて表示
+
+i0 <- which(dat$x==0)        # 発見が0になっているデータを抽出
+p0 <- dbinom(0,dat$n[i0],theta)*psi/(dbinom(0,dat$n[i0],theta)*psi+(1-psi))         # 見落とされていた（x=0）のうち実際には存在していたという確率（ベイズの定理による事後確率）を計算
+N0 <- replicate(1000,sum(rbinom(length(i0),1,p0)))       # 見落とされたが存在したものを確率的に復元
+N <- sum(dat$x>0)+N0        # 発見されたものに見落とされたものを足してやる
+( quantile(N, probs=c(0.025,0.5,0.975)) )          # 復元全個体数の信頼区間
+hist(N)       # 復元全個体数のヒストグラム
+
+n_mix <- function(p, dat, max_N=100){        # N-mixtureモデルの（負の）対数尤度関数を計算する関数
+  x <- dat$x       # 発見数
+  n <- dat$n       # 調査数
+  phi <- 1/(1+exp(-p[1]))        # 1個体を発見する確率
+  theta <- function(N) 1-(1-phi)^N         # N個体が存在するとき，少なくとも1個体が発見される確率
+  lambda <- exp(p[2])        # 平均個体数
+  
+  like <- sapply(1:nrow(dat), function(i) sum(dbinom(x[i],n[i],theta(0:max_N))*dpois(0:max_N,lambda)))          # 平均個体数がlambdaのポアソン分布に従うとして，N個体いるとき，発見確率がtheta(N)であるときに，n調査中でx回発見されるとなる確率であるが，Nは観測されないので和をとることになる．
+  -sum(log(like))           # 負の対数尤度
+}
+mod <- nlm(n_mix, c(-1,-1), dat=dat, hessian=TRUE)       # 最適化によるN混合モデルの個体数推定
+phi <- 1/(1+exp(-mod$estimate[1]))       # 個体の発見確率
+lambda <- exp(-mod$estimate[2])       # 平均個体数
+( c(phi=phi, lambda=lambda) )       # パラメータの表示
+
+N <- nrow(dat)*lambda        # 総個体数の推定
+var_N <- nrow(dat)^2*as.numeric(t(c(0,lambda))%*%solve(mod$hessian)%*%c(0,lambda))       # 個体数の分散推定量（デルタ法）
+cv_N <- sqrt(var_N)/N        # 個体数の変動係数
+C_ln <- exp(qnorm(1-0.05/2)*sqrt(log(1+cv_N^2)))        # 対数正規の信頼区間に必要な量
+CI_ln <- c(lower=N/C_ln, estimate=N, upper=N*C_ln)          # 対数正規信頼区間（最尤推定値も含む）
+round(CI_ln, 2)       # 信頼区間表示
+
+## 6 - 3　相対資源量指数
+
+a <- exp(-0.2); log_a <- log(a)
+Y <- 30; Sim <- 100; SS <- 5; sigma <- 0.4; q <- c(0.1, 0.9)
+Year <- rep(rev(2022-(0:(Y-1))), each=SS)
+n <- matrix(NA, nrow=Y, ncol=Sim)
+cpue <- log_q <- matrix(NA, nrow=Y*SS, ncol=Sim)
+n[1,] <- rnorm(Sim,0,1)
+eps <- matrix(sigma*rnorm(Y*SS*Sim),nrow=Y*SS,ncol=Sim)
+p <- function(i) 1/(1+exp(-(i-Y/2)/5))
+Location <- sapply(rep(1:Y,each=SS), function(i) rbinom(Sim, 1, p(i)))
+log_q <- log(t(matrix(q[Location+1],nrow=Sim,ncol=Y*SS))); Location <- t(Location)
+cpue[1:SS,] <- log_q[1:SS,] + n[1,] + eps[1:SS,]
+for (i in 1:(Y-1)){
+  n[i+1,] <- log_a+n[i,]
+  cpue[i*SS+(1:SS),] <- log_q[i*SS+1:SS,] + n[i+1,] + eps[i*SS+1:SS,]
+}
+p1 <- ggplot(data=data.frame(Year=unique(Year), Prob=p(1:Y)),aes(x=Year,y=Prob))+geom_line(color="blue",linewidth=2)+labs(y="Probability of Selecting q = 0.9")+theme_bw()
+WE <- c("East","West")
+Loc <- WE[Location[,1]+1]
+dat_for_gg <- data.frame(Year=rep(unique(Year),each=SS), num=rep(1:SS,len=nrow(cpue)), Location=Loc, CPUE=cpue[,1])
+p2 <- ggplot(dat_for_gg, aes(x=Year, y=CPUE, color=Location))+labs(y="log(CPUE)")+geom_point()+theme_bw()+theme(legend.position = c(0.1, 0.25))
+cowplot::plot_grid(p1,p2,nrow=2,align="v")
+
+res_nom <- lapply(1:Sim, function(i) lm(cpue[,i]~Year))
+res_std <- lapply(1:Sim, function(i) lm(cpue[,i]~Year*Location[,i]))
+dat_for_gg2 <- data.frame(Model=c(rep(c("Nominal","Standardized"),each=Sim)), Trend=c(sapply(1:Sim, function(i) res_nom[[i]]$coef[2]), sapply(1:Sim, function(i) res_std[[i]]$coef[2])))
+ggplot(dat_for_gg2,aes(x=Model,y=Trend))+geom_boxplot()+geom_hline(yintercept=-0.2,linetype="dashed")+theme_bw()
+
+library(glmmTMB)
+library(rvest)
+library(stringr)
+html <- read_html("https://iotc.org/data/datasets/latest/CE/Longline")
+zip_loc <- html %>% html_elements("a") %>% html_attr("href") %>% str_subset("\\.zip")
+temp <- tempfile()
+download.file(zip_loc, temp)
+cpue_dat <- read.csv(unzip(temp))
+YFT_dat <- cpue_dat[,c(1:12,13:15)]
+YFT_dat$Catch <- apply(YFT_dat[,13:15],1,sum,na.rm=TRUE)
+dat <- subset(YFT_dat, Year >= 2000 & substr(YFT_dat$Fleet,1,3)=="JPN")
+dat$Year <- factor(dat$Year)
+dat$Month <- (dat$MonthStart+dat$MonthEnd)/2
+dat$Month <- factor(dat$Month)
+dat$Grid <- factor(dat$Grid)
+mod_td0 <- glmmTMB(Catch~ Year-1,offset=log(Effort),family=tweedie,data=dat)
+mod_td1 <- glmmTMB(Catch~ Year+(1|Month)+(1|Grid)-1,offset=log(Effort),family=tweedie,data=dat)
+mod_td2 <- glmmTMB(Catch~ Year+(1|Month)+(1|Grid)+(1|Year:Month)+(1|Year:Grid)-1,offset=log(Effort),family=tweedie,data=dat)
+AIC(mod_td0,mod_td1,mod_td2)
+
+
 
 </body>
 </html>
