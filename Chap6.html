@@ -231,32 +231,32 @@ ggplot(dat_for_plot, aes(x=Year, y=CPUE, linetype=Model))+geom_line()+theme_bw()
 
 ## 6 - 4  除去法による個体数推定
 
-delury <- read.csv("Delury.csv")
-del2000 <- subset(delury,Year==2000)
-del2000$CC <- cumsum(del2000$Catch)
-mod_del <- lm(CPUE~CC,data=del2000)
-q <- -mod_del$coef[2]
-N0 <- mod_del$coef[1]/q
-p1 <- ggplot(del2000, aes(x=CC, y=CPUE))+geom_point()+labs(x="Cumulative Catch", y="CPUE")+theme_bw()
-del2000_add <- rbind(del2000, c(NA,NA,0,0,NA,N0))
-del2000_add <- cbind(del2000_add, pred_CPUE=q*N0-q*del2000_add$CC)
-( p2 <- p1+geom_line(data=del2000_add, aes(x=CC, y=pred_CPUE), color="blue", linetype="dashed")+annotate("text", x=65000, y=0.1, label=paste0("N0 =", round(N0))) )
+delury <- read.csv("Delury.csv")       # パタゴニアのヤリイカデータの読み込み
+del2000 <- subset(delury,Year==2000)        # 2000年のデータだけを抽出
+del2000$CC <- cumsum(del2000$Catch)       # 漁獲量の累積和を計算
+mod_del <- lm(CPUE~CC,data=del2000)       # CPUEを応答変数，漁獲量の累積和を説明変数として回帰を実行（デルーリー法）
+q <- -mod_del$coef[2]       # 漁獲効率の推定
+N0 <- mod_del$coef[1]/q       # 初期資源量の推定
+p1 <- ggplot(del2000, aes(x=CC, y=CPUE))+geom_point()+labs(x="Cumulative Catch", y="CPUE")+theme_bw()       # 累積漁獲量に対してCPUEをプロット
+del2000_add <- rbind(del2000, c(NA,NA,0,0,NA,N0))        # デルーリー法による予測値を描くためにデータを追加
+del2000_add <- cbind(del2000_add, pred_CPUE=q*N0-q*del2000_add$CC)      # 累積漁獲尾数が初期資源量と同じなったときの予測値（0）を追加
+( p2 <- p1+geom_line(data=del2000_add, aes(x=CC, y=pred_CPUE), color="blue", linetype="dashed")+annotate("text", x=65000, y=0.1, label=paste0("N0 =", round(N0))) )       # グラフを描画（初期資源量の値などを付与）
 
-dN0 <- c(1/(-mod_del$coef[2]), mod_del$coef[1]/mod_del$coef[2]^2)
-SE_N0 <- sqrt(t(dN0)%*%vcov(mod_del)%*%dN0)
-CV_N0 <- SE_N0/N0
-C_N0 <- exp(qnorm(1-0.05/2)*sqrt(log(1+CV_N0^2)))
-( CI_N0 <- c(N0/C_N0, N0*C_N0) )
+dN0 <- c(1/(-mod_del$coef[2]), mod_del$coef[1]/mod_del$coef[2]^2)       # 初期資源量を回帰係数で微分
+SE_N0 <- sqrt(t(dN0)%*%vcov(mod_del)%*%dN0)       # 初期資源量の微分のベクトルと回帰係数の分散共分散行列から個体数の標準誤差を計算（デルタ法を利用）
+CV_N0 <- SE_N0/N0       # 初期資源量推定値の変動係数
+C_N0 <- exp(qnorm(1-0.05/2)*sqrt(log(1+CV_N0^2)))         # 対数正規の信頼区間で使う値を計算
+( CI_N0 <- c(N0/C_N0, N0*C_N0) )         # 対数正規分布を仮定した資源量の信頼区間を表示
 
-del_res <- lapply(1987:2000, function(i) lm(CPUE~cumsum(Catch),data=subset(delury, Year==i)))
-lm_res <- sapply(1:length(del_res), function(i) c(-del_res[[i]]$coef[2], -del_res[[i]]$coef[1]/del_res[[i]]$coef[2]))
-lm_res <- as.data.frame(lm_res)
-names(lm_res) <- 1987:2000
-rownames(lm_res) <- c("q","N0")
-dat1 <- as.data.frame(t(lm_res)) %>% rownames_to_column(var="Year")
-pp1 <- ggplot(dat1, aes(x=Year, y=q))+geom_point(color="blue")+scale_x_discrete(breaks=seq(1987,2000,3))+theme_bw()
-pp2 <- ggplot(dat1, aes(x=Year, y=N0))+geom_point(color="blue")+scale_x_discrete(breaks=seq(1987,2000,3))+theme_bw()
-cowplot::plot_grid(pp1, pp2)
+del_res <- lapply(1987:2000, function(i) lm(CPUE~cumsum(Catch),data=subset(delury, Year==i)))         # 1987年から2000年までのデータに一気にデル―リー法（線形回帰）を適用
+lm_res <- sapply(1:length(del_res), function(i) c(-del_res[[i]]$coef[2], -del_res[[i]]$coef[1]/del_res[[i]]$coef[2]))         # 各年のデルーリー法から得られる結果（漁獲効率と初期資源量）を記録
+lm_res <- as.data.frame(lm_res)       # 結果をdata.frameに変換
+names(lm_res) <- 1987:2000        # 年の名前を付与
+rownames(lm_res) <- c("q","N0")       # 変数名を付与
+dat1 <- as.data.frame(t(lm_res)) %>% rownames_to_column(var="Year")      # 行列が逆になっていたので転置して，行の名前（年）をひとつの列とする
+pp1 <- ggplot(dat1, aes(x=Year, y=q))+geom_point(color="blue")+scale_x_discrete(breaks=seq(1987,2000,3))+theme_bw()        # 各年に対する漁獲効率の図を作成
+pp2 <- ggplot(dat1, aes(x=Year, y=N0))+geom_point(color="blue")+scale_x_discrete(breaks=seq(1987,2000,3))+theme_bw()        # 各年に対する初期資源量図を作成
+cowplot::plot_grid(pp1, pp2)       # 2つの図を並べて表示
 
 ## 6 - 5　コホート解析
 
@@ -390,9 +390,6 @@ N1 <- N1/N1[1]
 N2 <- N2/N2[1]
 dat_for_plot <- data.frame(Year=as.numeric(rep(colnames(res$naa),2)),Type=factor(rep(c("No tuned","Tuned"),each=nc)),PopSize=c(N1,N2))
 ggplot(dat_for_plot, aes(x=Year,y=PopSize,color=Type))+geom_line()+labs(y="Relative Population Size")+geom_hline(yintercept=0.05,linetype="dashed")+theme_bw()
-
-
-
 
 </body>
 </html>
