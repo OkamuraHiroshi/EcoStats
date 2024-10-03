@@ -1,0 +1,147 @@
+### 5章  非線形回帰モデル
+
+## 5 - 1  非線形回帰
+
+library(fishmethods)       # fishmethodsパッケージを読み込み
+library(tidyverse)        # tidyverseパッケージを読み込み
+data(pinfish)          # fishmethodsパッケージ内のpinfishデータを読み込み
+dat <- pinfish           # pinfishデータをdatにコピー
+p1 <- ggplot(dat, aes(x=age, y=sl)) + geom_point() + labs(x="Age", y="Lengh") + theme_bw()       # ggplotによって年齢に対する体長のプロットを作成
+print(p1)       # ggplotで作った図を表示
+
+mod <- nls(sl~Linf*(1-exp(-K*(age-a0))),data=dat,start=list(Linf=250,K=0.5,a0=0))        # von Bertalanffyの成長曲線のフィット
+parms <- summary(mod)$coefficients[,1]        # 成長曲線のパラメータの推定値
+Linf <- parms[1]; K <- parms[2]; a0 <- parms[3]        # 推定パラメータを分かりやすい名前の変数に代入
+vB <- Linf*(1-exp(-K*(dat$age-a0)))        # 体長の予測値を計算
+p2 <- p1 + geom_line(aes(x=age, y=vB), color="blue", linewidth=1.5)       # 上で作った図p1に成長曲線による予測値を追加
+print(p2)        # 図の描画
+
+mod2 <- nls(log(sl)~log(Linf)+log(1-exp(-K*(age-a0))),data=dat,start=list(Linf=250,K=0.5,a0=0))        # 体長そのままではなく，対数変換したものにモデルを適用
+parms <- summary(mod2)$coefficients[,1]       # 成長曲線のパラメータの推定値
+Linf <- parms[1]; K <- parms[2]; a0 <- parms[3]        # 推定パラメータを分かりやすい名前の変数に代入
+vB2 <- Linf*(1-exp(-K*(dat$age-a0)))        # 体長の予測値を計算        
+p3 <- p2 + geom_line(aes(x=age, y=vB2), color="blue", linetype="dashed", linewidth=1.5)       # 上で作った図p2に対数変換したものに正規分布誤差を仮定した成長曲線による予測値を追加
+print(p3)        # 図の描画
+
+## 5 - 2 一般化加法モデル
+
+set.seed(666)      # 乱数のseedを設定
+xmax <- 5       # xの最大値
+x <- 0:xmax       # xは0から5まで
+n <- length(x)     # xの要素数
+y <- rnorm(n,0,1)      # yはxの要素数と同じで，xとは独立に，標準正規分布から作成
+mod <- lm(y~poly(x,degree=n-1,raw=TRUE))       # yに対してxのn-1次の多項式回帰をフィット 
+xx <- seq(0,xmax,by=0.1)         # グラフ描画のためにx軸の値を細かく作成
+pred <- predict(mod, newdata=list(x=xx))         # 上のxxに対して予測値を計算
+dat <- data.frame(x=x,y=y)        # xとyの組をdatとする
+dat_p <- data.frame(x=xx,p=pred)      # xxとpredの組をdat_pとする
+p1 <- ggplot(dat,aes(x=x,y=y))+geom_point()+geom_line(data=dat_p,aes(x=x,y=p))+theme_bw()      # xとyの散布図に多項式回帰の曲線を上描き
+print(p1)      # 図を描画（データに完全にあてはまっている）
+
+fit_sp <- spline(x,y)       # x，yにスプライン曲線をフィット
+dat_sp <- data.frame(x=fit_sp$x,y=fit_sp$y)      #  スプライン曲線フィット結果のデータを作成
+p2 <- p1 + geom_line(aes(x=x,y=y),linetype="dotted")+geom_line(data=dat_sp,aes(x=x,y=y),linetype="dashed",color="blue")        # 観測点をつないだものとスプライン曲線フィットの結果を上描き
+print(p2)       # 図の描画
+
+library(mgcv)       # mgcvパッケージの読み込み
+library(tidymv)       # tidyverse用にmgcv::gamの予測値などを扱うためのパッケージ
+library(pscl)       # psclパッケージの読み込み
+data(prussian)       # prussianデータの読み込み
+dat <- prussian       # datにprussianをコピー
+res <- gam(y~s(year), data=dat, family=poisson)       # 年を説明変数としてポアソン分布を誤差分布とするgamをフィット 
+pred <- predict_gam(res)         # 予測値の作成（predict_gamはtidymvパッケージの関数）
+dat2 <- dat %>% group_by(year) %>% summarize(mean_y=mean(y))        # 年ごとの死亡者数の平均値のデータを作成
+ggplot(pred, aes(x=year, y=exp(fit)))+geom_line()+geom_point(data=dat2,aes(x=year,y=mean_y))+labs(x="Year",y="Predicted Value")+theme_bw()      # gamによる予測結果の曲線と観測データを同時にプロットして比較
+
+## 5 - 4 樹木モデル
+
+library(rpart)       # rpartパッケージの読み込み
+library(rpart.plot)       # rpart.plotパッケージの読み込み
+library(MASS)       # MASSパッケージの読み込み
+data(cats)       # catsデータの読み込み
+dat <- cats        # datにcatsデータをコピー
+(res_dt <- rpart(Sex ~ Bwt, data=dat, method="class", parms=list(split="gini"), control=list(maxdepth=1)))         # datの性別を体重量で予測するtreeモデル
+
+set.seed(13)       # 乱数発生のseed設定
+n <- nrow(dat)        # datのサンプルサイズ
+train <- sample(n,round(n*0.8))       # nのうちランダムに選んだ80%をトレーニングデータとする
+dat_train <- dat[train,]      # トレーニングデータ
+dat_test <- dat[-train,]      # テストデータ
+(res_dt <- rpart(Sex ~ Bwt + Hwt, data=dat_train,　method="class", parms=list(split="gini"),control=list(maxdepth=30)))        # 性別を体重と心臓重量で予測するtreeモデル
+rpart.plot(res_dt)        # treeによる分類結果を描画
+
+printcp(res_dt)       # cross validationによる最適なCP
+plotcp(res_dt)       # cross validationによるCPの変化プロット（x軸下のcpは，値の区間の幾何平均が使われているのでprintcpの値と違っている）
+
+library(pROC)       # pROCパッケージを読み込む
+pred_dt <- predict(res_dt,dat_test,type="prob")        # testデータに対する予測値
+roc_dt <- roc(dat_test$Sex, as.numeric(pred_dt[,2]))       # ROC曲線を描くためのアウトプット作成
+ggroc(roc_dt,legacy.axes=TRUE)+xlab("FPR")+ylab("TPR")+ggtitle(paste("AUC =",round(roc_dt$auc,2)))+geom_segment(aes(x=0, xend=1, y=0, yend=1), color="blue", linetype="dashed")+theme_bw()       # ggroc関数でROC曲線を描画．AUCも記載
+
+set.seed(1)         # 乱数発生のseed設定
+mod <- list()        # モデル結果を入れるためのリスト
+par(mfrow=c(1,2))        # 図を2個作成
+
+for (i in 1:2){
+  train <- sample(n,round(4/5*n))       # 80%をトレニーニングデータにする
+  dat_train <- dat[train,]        # トレーニングデータを作成
+  mod[[i]] <- rpart(Sex~Bwt+Hwt,data=dat_train,method="class")        # treeモデルをフィット
+  rpart.plot(mod[[i]])      # フィットしたtreeモデルの結果をプロット
+}        # 2つのモデルは結構違っている
+
+## 5 - 5 ランダムフォレスト
+
+library(randomForest)       # randomForestパッケージの読み込み
+set.seed(1)        # 乱数発生のseed設定
+(res_bg <- randomForest(as.factor(Sex) ~ Bwt+Hwt, mtry=2, data = dat_train))        # バギングに実行（Sexはカテゴリーであると指定．mtry=2は説明変数の数と同じなのでバギングになっている）
+(res_rf <- randomForest(as.factor(Sex) ~ Bwt+Hwt, data = dat_train))         # ランダムフォレストの実行（mtryを指定しておらず，デフォルトでsqrt(p)（pは説明変数の数）が使用される変数の数になる（本文参照）
+
+pred_bg <- predict(res_bg,dat_test,type="prob")         # バギングによるテストデータの予測結果
+roc_bg <- roc(dat_test$Sex, as.numeric(pred_bg[,2]))        # バギングのROCアウトプット作成
+pred_rf <- predict(res_rf,dat_test,type="prob")         # ランダムフォレストによるテストデータの予測
+roc_rf <- roc(dat_test$Sex, as.numeric(pred_rf[,2]))        # ランダムフォレストのROCアウトプット作成
+ggroc(list(bagging=roc_bg, randomforest=roc_rf),legacy.axes=TRUE)+xlab("FPR")+ylab("TPR")+ggtitle(paste("AUC =",round(roc_bg$auc,2),", ",round(roc_rf$auc,2)))+geom_segment(aes(x=0, xend=1, y=0, yend=1), color="blue", linetype="dashed")+theme_bw()      # バギングの結果とランダムフォレストの結果を同時に描画．AUCも付与
+
+varImpPlot(res_rf)        # variable importance plot（変数の重要度のプロット）
+
+partialPlot(res_rf, dat, Bwt, "F")        # partial dependence plot（datに対するres_rfの結果のBwtに対するpartial dependence plot．"F"と"M"のクラスがあるので"F"の方をプロット）
+partialPlot(res_rf, dat, Hwt, "F")        # partial dependence plot（datに対するres_rfの結果のHwtに対するpartial dependence plot．"F"と"M"のクラスがあるので"F"の方をプロット）
+
+## 5 - 6 ブースティング
+
+library(gbm)         # gbmパッケージの読み込み
+set.seed(1)         # 乱数のseed設定
+dat_train$sex <- as.numeric(dat_train$Sex)-1       # 性別（"F"と"M"）を-1と1に変換
+res_ab <- gbm(sex ~ Bwt + Hwt, data = dat_train,distribution = "adaboost", n.trees = 100, bag.fraction=1, shrinkage = 1,  interaction.depth = 1, cv.folds = 5)      # adaboostをフィット
+res_gb <- gbm(sex ~ Bwt + Hwt, data = dat_train,distribution = "bernoulli", n.trees = 100, bag.fraction=1, shrinkage = 1,  interaction.depth = 1, cv.folds = 5)         # 勾配ブースティングのフィット
+res_sgb <- gbm(sex ~ Bwt + Hwt, data = dat_train,distribution = "bernoulli", n.trees = 100, bag.fraction=0.5, shrinkage = 0.1, interaction.depth = 2, cv.folds = 5)          # 確率的勾配ブースティングのフィット
+
+pred_ab <- predict(res_ab,dat_test,n.trees=which.min(res_ab$cv.error),type="response")       # adaboostの予測
+roc_ab <- roc(dat_test$Sex, as.numeric(pred_ab))       # adaboostのROC出力
+pred_gb <- predict(res_gb,dat_test,n.trees=which.min(res_gb$cv.error),type="response")       # 勾配ブースティングの予測
+roc_gb <- roc(dat_test$Sex, as.numeric(pred_gb))       # 勾配ブースティングのROC出力
+pred_sgb <- predict(res_sgb,dat_test,n.trees=which.min(res_sgb$cv.error),type="response")       # 確率的勾配ブースティングの予測
+roc_sgb <- roc(dat_test$Sex, as.numeric(pred_sgb))       # 確率的勾配ブースティングのROC出力
+ggroc(list(Ada_boost=roc_ab,Gradient_boost=roc_gb,Stochastic_gradient_boost=roc_sgb),legacy.axes=TRUE)+xlab("FPR")+ylab("TPR")+ggtitle(paste("AUC =",round(roc_ab$auc,2)," ",round(roc_gb$auc,2)," ",round(roc_sgb$auc,2)))+geom_segment(aes(x=0, xend=1, y=0, yend=1), color="brown", linetype="dashed")+theme_bw()        # adaboost, 勾配ブースティング，確率的勾配ブースティングのROC曲線とAUCの比較
+
+library(xgboost)       # xgboostパッケージの読み込み
+res_xgb_cv <- xgb.cv(param=list("objective" = "binary:logistic"), data = as.matrix(dat_train[,2:3]), label = dat_train$sex, nfold = 5, subsample=0.5, eta=0.1, nrounds=100, verbose=0)       # xgboostに対するクロスバリデーションを実行
+nround_xgb <- which.min(res_xgb_cv$evaluation_log[[4]])+1       # 上のCV結果に基づきxgboostパラメータの簡易チューニング
+res_xgb <- xgboost(param=list("objective" = "binary:logistic"), data = as.matrix(dat_train[,2:3]), label = dat_train$sex, subsample=0.5, eta=0.1, nrounds=nround_xgb, verbose=0)         # 最適チューニングパラメータを使用してxgboostを再実行
+pred_xgb <- predict(res_xgb,as.matrix(dat_test[,2:3]),type="response")         # xgboostによるテストデータの予測
+roc_xgb <- roc(dat_test$Sex, as.numeric(pred_xgb))        # xgboost結果に対するROC曲線のためのアウトプット生成
+ggroc(roc_xgb,legacy.axes=TRUE)+xlab("FPR")+ylab("TPR")+ggtitle(paste("AUC =",round(roc_xgb$auc,2)))+geom_segment(aes(x=0, xend=1, y=0, yend=1), color="blue", linetype="dashed")+theme_bw()       # xgboostのROC曲線描画とAUC
+
+## 5 - 7 その他の非線形回帰手法
+
+library(nnet)       # nnetパッケージの読み込み
+res_nn <- nnet(sex~Bwt+Hwt, data=dat_train, size=50, decay=0.25, maxit=100, trace=FALSE)       # ニューラルネットの適用
+pred_nn <- predict(res_nn,dat_test)        # ニューラルネットによる予測値
+roc_nn <- roc(dat_test$Sex, as.numeric(pred_nn))        # ニューラルネットのROCアウトプット
+
+library(kernlab)      # kernlabパッケージの読み込み
+res_svm <- ksvm(as.matrix(dat_train[,2:3]),dat_train[,1],type="C-svc",kernel="rbfdot",kpar=list(sigma=1),C=5,scaled=FALSE,cross=5)       # サポートベクターマシンのフィッティング
+pred_svm <- predict(res_svm,as.matrix(dat_test[,2:3]))       # サポートベクターマシンによる予測値
+roc_svm <- roc(dat_test$Sex, as.numeric(pred_svm))         # サポートベクターマシンのROCアウトプット
+
+ggroc(list(NN=roc_nn,SVM=roc_svm),legacy.axes=TRUE)+xlab("FPR")+ylab("TPR")+ggtitle(paste("AUC =",round(roc_nn$auc,2)," ",round(roc_svm$auc,2)))+geom_segment(aes(x=0, xend=1, y=0, yend=1), color="blue", linetype="dashed")+theme_bw()       # ニューラルネットとサポートベクターマシンのROC曲線とAUC

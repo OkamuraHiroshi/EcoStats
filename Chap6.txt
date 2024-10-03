@@ -1,0 +1,386 @@
+### 6章  個体数推定のための統計モデル
+
+## 6 - 1 個体数推定のための調査手法
+
+possum <- read.csv("https://raw.githubusercontent.com/cran/PL.popN/master/data/possum.txt", sep=" ")       # インターネットネット上にあるpossum.txtを取り込む
+summary(possum)       # possumの中身を確認
+
+possum$n <- 5-possum$t1     # possumデータから二項分布の試行回数を作成
+possum$z <- possum$y-1      # possumデータから二項分布の成功回数を作成
+mod0 <- glm(cbind(z,n-z)~1,family=binomial,data=possum)      # 二項分布回帰を実行
+
+logit_p <- mod0$coefficients       # 二項分布回帰で推定された回帰係数
+ilogit <- function(x) exp(x)/(1+exp(x))         # logit値を逆変換して確率に戻す関数
+( p <- ilogit(logit_p) )       # possumの発見確率
+
+n <- nrow(possum)        # possumのサンプルサイズ
+( N <- n/p )        # サンプルサイズを発見確率で割ることで個体数を推定する
+
+library(tidyverse)        # tidyverseパッケージの読み込み
+mod1 <- glm(cbind(z,n-z)~x,family=binomial,data=possum)         # 体重量xを説明変数として二項分布回帰する
+mod2 <- glm(cbind(z,n-z)~x+I(x^2),family=binomial,data=possum)                 # 体重量xと体重量x^2を説明変数として二項分布回帰する
+AIC(mod0, mod1, mod2)          # 説明変数なし，説明変数x，説明変数x + x^2のモデルのAIC比較
+new_x <- 30:50         # グラフで予測曲線を描くためのx軸の値
+new_possum <- data.frame(x=new_x,y=ilogit(predict(mod2,newdata=list(x=new_x))))
+ggplot(new_possum, aes(x,y))+geom_line()+labs(x="Body Weight (g)", y="Detection Probability")+theme_bw()        # AIC最小のモデルmod2による予測結果のプロット
+
+pred_p <- ilogit(predict(mod2))     # mod2を使った場合の発見確率（体重により異なる）
+( N_new <- sum(1/pred_p) )        # 体重による発見確率の違いを考慮した個体数推定
+
+numeric_deriv <- function(mod, h=0.00001){     # 個体数推定値のパラメータによる微分を計算する関数
+  p <- mod$coef      # 回帰のパラメータ
+  X <- model.matrix(mod)        # 説明変数
+  d <- h*diag(length(p))        # 数値微分のために回帰係数に足し引きする微小量を与える
+  (apply(d, 1, function(x) sum(1/ilogit(X%*%(p+x))))-apply(d, 1, function(x) sum(1/ilogit(X%*%(p-x)))))/(2*h)      # 各パラメータに対する個体数推定値の微分
+}
+var_N <- t(numeric_deriv(mod2))%*%vcov(mod2)%*%numeric_deriv(mod2)       # デルタ法による個体数の近似分散
+se_N <- sqrt(var_N)        # 個体数の標準誤差
+( cv_N <- se_N/N_new )       # 個体数の変動係数
+
+alpha <- 1-0.95        # 有意水準の設定
+C_ln <- exp(qnorm(1-alpha/2)*sqrt(log(1+cv_N^2)))       # 対数正規分布の近似信頼区間で使用する値
+CI_ln <- c(N_new/C_ln, N_new*C_ln)        # 対数正規分布の信頼区間
+round(CI_ln, 2)       # 信頼区間を表示
+
+alpha <- 1-0.95       # 有意水準の設定
+Sim <- 2000       # シミュレーションの回数
+N_b <- NULL       # bootstrap sampleに対する個体数推定値
+set.seed(1)       # 乱数発生のseed設定
+for (i in 1:Sim){
+  id <- sample(n, n, replace=TRUE)        # n個からn個を復元抽出でリサンプル
+  mod2b <- glm(cbind(z,n-z)~x+I(x^2),family=binomial,dat=possum[id,])       # bootsrapサンプルデータに対して2次の共変量を持つ二項回帰モデルをフィット
+  pred_pb <- ilogit(predict(mod2b))        # 発見確率の推定
+  N_b <- c(N_b, sum(1/pred_pb))         # bootstrapによる個体数推定値を保存
+}
+CI_b <- quantile(N_b,probs=c(alpha/2,1-alpha/2))       # percentile法による信頼区間
+round(CI_b, 2)        # 信頼区間の表示
+
+library(Rdistance)          # Rdistanceパッケージの読み込み
+data("sparrowDetectionData")         # sparrowDetectionDataの読み込み
+dat <- sparrowDetectionData          # sparrowDetectionDataをdatにコピー
+dat <- dat %>% mutate(pd=as.numeric(dist))         # pd（垂直横距離を数値化したもの）を新しい変数として追加
+p1 <- ggplot(dat, aes(x=pd, y=..density..))+geom_histogram(position="identity",boundary=0,bins=15)+labs(x="Perpendicular Distance (m)")+theme_bw()      # 垂直横距離の確率分布の図
+print(p1)       # 図を表示
+
+x_max <- 120       # 横距離の最大値
+dat <- dat %>% filter(pd <= 120)       # 横距離を120m以下のものに制限する
+p1 <- ggplot(dat, aes(x=pd, y=..density..))+geom_histogram(position="identity",boundary=0, bins=15)+labs(x="Perpendicular Distance (m)")+theme_bw()      # 横距離の確率分布の図
+g <- function(x,sigma) exp(-x^2/(2*sigma^2))       # 半正規分布の発見関数
+log_like <- function(p, dat, x_max=Inf){        # 発見確率のパラメータ推定のための対数尤度関数
+  x <- dat$pd       # 垂直横距離
+  x <- x[x <= x_max]        # x_max以下の距離データに制限（truncationと言う）
+  sigma <- exp(p)       # 発見確率のパラメータ sigma
+#  w <- integrate(g,0,w,sigma=sigma)$value        # 有効探索幅の計算（一般には解析的に求められないので，数値積分などで計算する．発見関数が半正規分布の場合は，pnormで計算可能）
+  w <- sqrt(2*pi)*sigma*(pnorm(x_max,0,sigma)-pnorm(0,0,sigma))       # 発見関数が半正規分布のときの有効探索幅
+  -sum(log(g(x,sigma))-log(w))       # 横距離データに対する負の対数尤度
+}
+init_p <- log(mean(dat$pd))      #   発見確率のパラメータ（sigmaの対数値）の初期値（平均横距離の対数を与える）
+mod <- nlm(log_like, init_p, dat=dat, x_max=x_max, hessian=TRUE)        # パラメータ推定の最適化
+sigma <- exp(mod$estimate)       # 推定結果から発見関数のパラメータsigmaを推定
+x <- seq(0,x_max)         # 横距離の範囲
+esw <- function(sigma, x_max=Inf) sqrt(2*pi)*sigma*(pnorm(x_max,0,sigma)-pnorm(0,0,sigma))        # 有効探索幅を計算する関数
+w <- esw(sigma, x_max)           # 推定パラメータと横距離の最大値から有効探索幅を計算
+dat1 <- layer_data(p1)          # 上で作ったggplotのグラフp1から元となるデータを抽出
+pred <- sapply(1:nrow(dat1), function(i) sqrt(2*pi)*sigma*(pnorm(dat1$xmax[i],0,sigma)-pnorm(dat1$xmin[i],0,sigma)))         # 垂直横距離の理論的な確率予測値を計算する
+pred1 <- pred/sum(pred)*sum(dat1$y)        # グラフで観測度数と予測値の高さを合わせるための調整
+p2 <- p1 + geom_line(data=dat1, aes(x=x,y=pred1), color="blue")      # 横距離の元の観測値頻度グラフにモデルから予測された曲線を追加フィットするグラフ
+print(p2)        # グラフ描画
+
+data(sparrowSiteData)        # 発見場所に関するライントランセクト調査データ
+dat_s <- sparrowSiteData         # sparrowSiteDataをdat_sにコピー
+L <- sum(as.numeric(dat_s$length))         # 調査の総距離
+n <- nrow(dat)       # 総発見数
+A <- 4105*1000^2         # 調査面積（?sparrowSiteDataから情報を得る）
+( N <- A*n/(2*L*w) )        # 個体数推定値
+
+numeric_deriv <- function(mod, h=0.00001){       # 有効探索幅のパラメータによる数値微分を行う関数
+  p <- mod$estimate      # 最適化で推定されたパラメータ
+  d <- h*diag(length(p))         # 数値微分のための微小量の設定
+  (apply(d, 1, function(x) esw(exp(p+x)))-apply(d, 1, function(x) esw(exp(p-x))))/(2*h)       # 数値微分
+}
+var_w <- t(numeric_deriv(mod))%*%(1/mod$hessian)%*%numeric_deriv(mod)       # デルタ法による有効探索幅の分散の計算
+cv_w <- sqrt(var_w)/w        # 有効探索幅の変動係数
+k <- nrow(dat_s)        # 調査ラインの数
+n <- tapply(dat$dist, dat$siteID, length)      # ラインごとの発見数
+n[is.na(n)] <- 0       # そのラインに発見がない場合，NAを発見数=0にする
+l <- as.numeric(dat_s$length)        # 各ラインの長さ
+mean_nl <- sum(n)/L         # 全ラインあたりの発見数（遭遇率）
+var_nl <- 1/(k-1)*sum(l/L*(n/l-mean_nl)^2)         # 遭遇率のライン重み付き分散
+cv_nl <- sqrt(var_nl)/mean_nl       # 遭遇率の変動係数
+cv_N <- sqrt(cv_nl^2+cv_w^2)       # 遭遇率の変動係数の二乗と有効探索幅の変動係数の二乗を合わせて平方根をとることにより個体数の変動係数を計算
+C_ln <- exp(qnorm(1-0.05/2)*sqrt(log(1+cv_N^2)))        # 対数正規信頼区間に必要な定数
+CI_ln <- c(N/C_ln, N*C_ln)       # 対数正規分布を仮定した信頼区間
+round(CI_ln, 2)       # 信頼区間の表示
+
+## 6 - 2　占有モデル
+
+library(unmarked)        # unmarkedパッケージの読み込み
+data(crossbill)         # crossbillデータの読み込み
+dat <- crossbill[, 1:7]          # crossbillデータをdatにコピー
+dat$n <- apply(dat[,5:7],1,function(x) sum(!is.na(x)))        # 調査の回数（基本は3回調査だが，全く調査がされていなかったり，最後の調査が欠測していて2回だけとなっている場合もある）
+dat$x <- apply(dat[,5:7],1,sum,na.rm=TRUE)       # 発見があった調査の個数
+dat <- dat[dat$n > 0, ]       # 調査回数が正のデータだけとってくる
+
+loglik <- function(p, dat){         # （負の）対数尤度関数
+  psi <- exp(p[1])        # 存在確率
+  theta <- exp(p[2])        # 発見確率
+  n <- dat$n       # 調査回数
+  x <- dat$x       # 調査のうち発見があった回数
+  -sum(log(dbinom(x,n,theta)*psi+ifelse(x==0,1,0)*(1-psi)),na.rm=TRUE)      # 負の対数尤度（存在していたら発見があったときに観測されるが，存在していなかったら発見もなし：0は膨らませられている）
+}
+mod <- nlm(loglik,c(-1,-1),dat)       # 最適化（負の対数尤度を最小にするパラメータを探索）
+psi <- exp(mod$estimate[1])        # 存在確率
+theta <- exp(mod$estimate[2])        # 発見確率
+( parms <- c(psi=psi, theta=theta) )         # 推定パラメータをまとめて表示
+
+i0 <- which(dat$x==0)        # 発見が0になっているデータを抽出
+p0 <- dbinom(0,dat$n[i0],theta)*psi/(dbinom(0,dat$n[i0],theta)*psi+(1-psi))         # 見落とされていた（x=0）のうち実際には存在していたという確率（ベイズの定理による事後確率）を計算
+N0 <- replicate(1000,sum(rbinom(length(i0),1,p0)))       # 見落とされたが存在したものを確率的に復元
+N <- sum(dat$x>0)+N0        # 発見されたものに見落とされたものを足してやる
+( quantile(N, probs=c(0.025,0.5,0.975)) )          # 復元全個体数の信頼区間
+hist(N)       # 復元全個体数のヒストグラム
+
+n_mix <- function(p, dat, max_N=100){        # N-mixtureモデルの（負の）対数尤度関数を計算する関数
+  x <- dat$x       # 発見数
+  n <- dat$n       # 調査数
+  phi <- 1/(1+exp(-p[1]))        # 1個体を発見する確率
+  theta <- function(N) 1-(1-phi)^N         # N個体が存在するとき，少なくとも1個体が発見される確率
+  lambda <- exp(p[2])        # 平均個体数
+  
+  like <- sapply(1:nrow(dat), function(i) sum(dbinom(x[i],n[i],theta(0:max_N))*dpois(0:max_N,lambda)))          # 平均個体数がlambdaのポアソン分布に従うとして，N個体いるとき，発見確率がtheta(N)であるときに，n調査中でx回発見されるとなる確率であるが，Nは観測されないので和をとることになる．
+  -sum(log(like))           # 負の対数尤度
+}
+mod <- nlm(n_mix, c(-1,-1), dat=dat, hessian=TRUE)       # 最適化によるN混合モデルの個体数推定
+phi <- 1/(1+exp(-mod$estimate[1]))       # 個体の発見確率
+lambda <- exp(-mod$estimate[2])       # 平均個体数
+( c(phi=phi, lambda=lambda) )       # パラメータの表示
+
+N <- nrow(dat)*lambda        # 総個体数の推定
+var_N <- nrow(dat)^2*as.numeric(t(c(0,lambda))%*%solve(mod$hessian)%*%c(0,lambda))       # 個体数の分散推定量（デルタ法）
+cv_N <- sqrt(var_N)/N        # 個体数の変動係数
+C_ln <- exp(qnorm(1-0.05/2)*sqrt(log(1+cv_N^2)))        # 対数正規の信頼区間に必要な量
+CI_ln <- c(lower=N/C_ln, estimate=N, upper=N*C_ln)          # 対数正規信頼区間（最尤推定値も含む）
+round(CI_ln, 2)       # 信頼区間表示
+
+## 6 - 3　相対資源量指数
+
+# CPUE標準化の重要性を示すシミュレーション
+set.seed(1)       # 乱数発生のseed設定
+a <- exp(-0.2); log_a <- log(a)       # a（年による減少率）とその対数
+Y <- 30; Sim <- 100; SS <- 5; sigma <- 0.4; q <- c(0.1, 0.9)       # パラメータ設定（Y：年数，Sim：シミュレーション回数，SS：各年の観測数，sigma：CPUEの対数値の標準偏差，q：東西の漁獲効率
+Year <- rep(rev(2022-(0:(Y-1))), each=SS)      # 1993年から2022年まで30年間の年ラベル（各年5個ずつ）
+n <- matrix(NA, nrow=Y, ncol=Sim)        # 個体数の対数値の入れ物となる行列
+cpue <- log_q <- matrix(NA, nrow=Y*SS, ncol=Sim)        # CPUEと漁具能率の対数値の行列
+n[1,] <- rnorm(Sim,0,1)         # 1年前の個体数
+eps <- matrix(sigma*rnorm(Y*SS*Sim),nrow=Y*SS,ncol=Sim)       # cpueの観測誤差
+p <- function(i) 1/(1+exp(-(i-Y/2)/5))       # 西側で漁獲を行う確率（年によって変化する）
+Location <- sapply(rep(1:Y,each=SS), function(i) rbinom(Sim, 1, p(i)))       # 上で定義した確率で選択された漁獲を行う場所（Locationは，行数がSim，列数がY*SSになっている）
+log_q <- log(t(matrix(q[Location+1],nrow=Sim,ncol=Y*SS))); Location <- t(Location)      # 東西場所選択に対応したqの選択とlog_qの作成（転置して，Y*SS行Sim列に）．後のために，Locationも転置してY*SS行Sim列の行列に．
+cpue[1:SS,] <- log_q[1:SS,] + n[1,] + eps[1:SS,]        # 最初の年のCPUE
+for (i in 1:(Y-1)){
+  n[i+1,] <- log_a+n[i,]       # i年のCPUE（年率aで減少していっている）
+  cpue[i*SS+(1:SS),] <- log_q[i*SS+1:SS,] + n[i+1,] + eps[i*SS+1:SS,]        # 個体数に漁獲効率qを掛け，誤差を付与してcpue（対数値）を作成
+}
+p1 <- ggplot(data=data.frame(Year=unique(Year), Prob=p(1:Y)),aes(x=Year,y=Prob))+geom_line(color="blue",linewidth=2)+labs(y="Probability of Selecting q = 0.9")+theme_bw()        # 年による場所選択率の変化の様子（年が進むと西に行きやすくなる）
+WE <- c("East","West")       # 東西のラベル
+Loc <- WE[Location[,1]+1]         # 選択された場所が東西どちらだったか
+dat_for_gg <- data.frame(Year=rep(unique(Year),each=SS), num=rep(1:SS,len=nrow(cpue)), Location=Loc, CPUE=cpue[,1])        # プロットに必要なデータをまとめる
+p2 <- ggplot(dat_for_gg, aes(x=Year, y=CPUE, color=Location))+labs(y="log(CPUE)")+geom_point()+theme_bw()+theme(legend.position = c(0.1, 0.25))         # 年に対するCPUEの対数値をプロット（東西どちらで漁獲を行っていたかを色の違いで描画）
+cowplot::plot_grid(p1,p2,nrow=2,align="v")         # 上で作った選択率変化のグラフとCPUE変化の様子を上下に並べて表示
+
+res_nom <- lapply(1:Sim, function(i) lm(cpue[,i]~Year))       # 場所の変化による漁獲効率の違いを無視して減少率を推定するモデル
+res_std <- lapply(1:Sim, function(i) lm(cpue[,i]~Year*Location[,i]))         # 年と場所の交互作用を考えることにより，年による場所の違いを考慮に入れたモデル
+dat_for_gg2 <- data.frame(Model=c(rep(c("Nominal","Standardized"),each=Sim)), Trend=c(sapply(1:Sim, function(i) res_nom[[i]]$coef[2]), sapply(1:Sim, function(i) res_std[[i]]$coef[2])))       # 2つのモデルから推定された減少率の推定値を並べる
+ggplot(dat_for_gg2,aes(x=Model,y=Trend))+geom_boxplot()+geom_hline(yintercept=log_a,linetype="dashed")+theme_bw()      # 2つのモデルによって推定された減少率の対数値と真の減少率の対数値を比較
+
+library(glmmTMB)       # glmmTMBパッケージの読み込み
+library(rvest)       # rvestパッケージの読み込み
+library(stringr)       # stringrパッケージの読み込み
+html <- read_html("https://iotc.org/data/datasets/latest/CE/Longline")       # はえ縄で漁獲されたまぐろの漁獲情報が載っているウェブサイトの場所
+zip_loc <- html %>% html_elements("a") %>% html_attr("href") %>% str_subset("\\.zip")       # 上記ウェブサイトにあるzipファイルを抽出
+temp <- tempfile()      # 空のファイル名を設定
+download.file(zip_loc, temp)        # zipファイルをtempとしてダウンロード
+cpue_dat <- read.csv(unzip(temp))         # tempを解凍して，中のcsvファイルを読み込む
+YFT_dat <- cpue_dat[,c(1:12,13:15)]          # 必要なデータの抽出
+YFT_dat$Catch <- apply(YFT_dat[,13:15],1,sum,na.rm=TRUE)         # 漁獲量の列を作成
+dat <- subset(YFT_dat, Year >= 2000 & substr(YFT_dat$Fleet,1,3)=="JPN")        # 2000年以降日本が漁獲したデータに限定してdatとする
+dat$Year <- factor(dat$Year)       # 年の情報をカテゴリーにする（年による非線形なトレンドをとらえるため，CPUE標準化ではよくやられる）
+dat$Month <- (dat$MonthStart+dat$MonthEnd)/2      # 開始月と終了月の記録があるので，平均したものを月とする
+dat$Month <- factor(dat$Month)       # 月をカテゴリーにする
+dat$Grid <- factor(dat$Grid)       # 漁獲場所が数字で与えられているので，これもカテゴリーにする
+mod_td0 <- glmmTMB(Catch~ Year-1,offset=log(Effort),family=tweedie,data=dat)       # 誤差分布をTweedieにして，努力量の対数値をoffsetにし，年の効果だけを考慮したモデル（-1することで切片を除く）
+mod_td1 <- glmmTMB(Catch~ Year+(1|Month)+(1|Grid)-1,offset=log(Effort),family=tweedie,data=dat)        # 上と同じ設定で，月と場所をランダム効果にして加えたモデル
+mod_td2 <- glmmTMB(Catch~ Year+(1|Month)+(1|Grid)+(1|Year:Month)+(1|Year:Grid)-1,offset=log(Effort),family=tweedie,data=dat)         # 上と同じ設定で，月と場所，年と月の交互作用，年と場所の交互作用をランダム効果にして加えたモデル
+AIC(mod_td0,mod_td1,mod_td2)        # 3つのモデルのAICを比較
+
+pred0 <- exp(mod_td0$fit$parfull[names(mod_td0$fit$parfull)=="beta"])      # 上のモデルmod_td0による年の効果（固定効果）から計算した個体数指標値
+pred1 <- exp(mod_td1$fit$parfull[names(mod_td1$fit$parfull)=="beta"])      # 上のモデルmod_td1による年の効果（固定効果）から計算した個体数指標値
+pred2 <- exp(mod_td2$fit$parfull[names(mod_td2$fit$parfull)=="beta"])      # 上のモデルmod_td2による年の効果（固定効果）から計算した個体数指標値
+pred0 <- pred0/mean(pred0)         # 比較するためにpred0を平均で割って基準化（傾向がとらえられれば良いので高さはあまり関係ない）
+pred1 <- pred1/mean(pred1)         # 比較するためにpred1を平均で割って基準化
+pred2 <- pred2/mean(pred2)         # 比較するためにpred2を平均で割って基準化
+Year <- as.numeric(as.character(unique(dat$Year)))        # グラフ化のため年のラベルを抽出
+dat_for_plot <- data.frame(Year=rep(Year,3), Model=factor(rep(0:2, each=length(Year))), CPUE=c(pred0,pred1,pred2))         # モデルごとに各年の予測値（個体数指標値）を入れたデータを作成
+ggplot(dat_for_plot, aes(x=Year, y=CPUE, linetype=Model))+geom_line()+theme_bw()         # モデルごとの標準化CPUE推定値の描画
+
+## 6 - 4  除去法による個体数推定
+
+delury <- read.csv("Delury.csv")       # パタゴニアのヤリイカデータの読み込み
+del2000 <- subset(delury,Year==2000)        # 2000年のデータだけを抽出
+del2000$CC <- cumsum(del2000$Catch)       # 漁獲量の累積和を計算
+mod_del <- lm(CPUE~CC,data=del2000)       # CPUEを応答変数，漁獲量の累積和を説明変数として回帰を実行（デルーリー法）
+q <- -mod_del$coef[2]       # 漁獲効率の推定
+N0 <- mod_del$coef[1]/q       # 初期資源量の推定
+p1 <- ggplot(del2000, aes(x=CC, y=CPUE))+geom_point()+labs(x="Cumulative Catch", y="CPUE")+theme_bw()       # 累積漁獲量に対してCPUEをプロット
+del2000_add <- rbind(del2000, c(NA,NA,0,0,NA,N0))        # デルーリー法による予測値を描くためにデータを追加
+del2000_add <- cbind(del2000_add, pred_CPUE=q*N0-q*del2000_add$CC)      # 累積漁獲尾数が初期資源量と同じなったときの予測値（0）を追加
+( p2 <- p1+geom_line(data=del2000_add, aes(x=CC, y=pred_CPUE), color="blue", linetype="dashed")+annotate("text", x=65000, y=0.1, label=paste0("N0 =", round(N0))) )       # グラフを描画（初期資源量の値などを付与）
+
+dN0 <- c(1/(-mod_del$coef[2]), mod_del$coef[1]/mod_del$coef[2]^2)       # 初期資源量を回帰係数で微分
+SE_N0 <- sqrt(t(dN0)%*%vcov(mod_del)%*%dN0)       # 初期資源量の微分のベクトルと回帰係数の分散共分散行列から個体数の標準誤差を計算（デルタ法を利用）
+CV_N0 <- SE_N0/N0       # 初期資源量推定値の変動係数
+C_N0 <- exp(qnorm(1-0.05/2)*sqrt(log(1+CV_N0^2)))         # 対数正規の信頼区間で使う値を計算
+( CI_N0 <- c(N0/C_N0, N0*C_N0) )         # 対数正規分布を仮定した資源量の信頼区間を表示
+
+del_res <- lapply(1987:2000, function(i) lm(CPUE~cumsum(Catch),data=subset(delury, Year==i)))         # 1987年から2000年までのデータに一気にデル―リー法（線形回帰）を適用
+lm_res <- sapply(1:length(del_res), function(i) c(-del_res[[i]]$coef[2], -del_res[[i]]$coef[1]/del_res[[i]]$coef[2]))         # 各年のデルーリー法から得られる結果（漁獲効率と初期資源量）を記録
+lm_res <- as.data.frame(lm_res)       # 結果をdata.frameに変換
+names(lm_res) <- 1987:2000        # 年の名前を付与
+rownames(lm_res) <- c("q","N0")       # 変数名を付与
+dat1 <- as.data.frame(t(lm_res)) %>% rownames_to_column(var="Year")      # 行列が逆になっていたので転置して，行の名前（年）をひとつの列とする
+pp1 <- ggplot(dat1, aes(x=Year, y=q))+geom_point(color="blue")+scale_x_discrete(breaks=seq(1987,2000,3))+theme_bw()        # 各年に対する漁獲効率の図を作成
+pp2 <- ggplot(dat1, aes(x=Year, y=N0))+geom_point(color="blue")+scale_x_discrete(breaks=seq(1987,2000,3))+theme_bw()        # 各年に対する初期資源量図を作成
+cowplot::plot_grid(pp1, pp2)       # 2つの図を並べて表示
+
+## 6 - 5　コホート解析
+
+library(TropFishR)      # TropFishRパッケージを読み込み
+data(whiting)        # whitingデータを読み込み
+dat <- whiting         # whitingデータをdatにコピー
+vpa <- function(p, dat, replace_zero_catch=0.1){        # VPAによって年齢別個体数・漁獲係数を計算するプログラム
+  F_AT <- exp(p)        # 最高齢A最終年Tの漁獲係数（推定パラメータ）
+  
+  caa <- as.matrix(dat$catch)       # 漁獲尾数を行列データに変換
+  caa[caa==0] <- replace_zero_catch        # 漁獲尾数が0となっているものを予め設定した小さな正数で置き換える
+  M <- dat$M         # 自然死亡係数
+  nr <- nrow(caa)       # 年齢別漁獲尾数の行数（年齢クラスの数）
+  nc <- ncol(caa)       # 年齢別漁獲尾数の列数（年数）
+  
+  naa <- faa <- matrix(NA, nr, nc)
+  
+  cohort_analysis <- function(fr,i,j){
+    faa[i, j] <- fr
+    naa[i, j] <- caa[i, j]*exp(M/2)*(1-exp(-faa[i, j]))
+  
+    for (k in 1:i){
+      if (i-k > 0 & j-k >0){
+        naa[i-k, j-k] <- (naa[i-(k-1), j-(k-1)]*exp(M/2)+caa[i-k, j-k])*exp(M/2)
+        faa[i-k, j-k] <- -log(1-caa[i-k, j-k]*exp(M/2)/naa[i-k, j-k])
+      }
+    }
+    return(list(faa=faa, naa=naa))
+  }
+  
+  res <- cohort_analysis(F_AT, nr, nc)
+  faa <- res$faa
+  naa <- res$naa
+  
+  for (i in 1:(nr-1)){
+    Fr <- faa[nr-i, nc-1]
+    res <- cohort_analysis(Fr, nr-i, nc)
+    faa <- res$faa
+    naa <- res$naa
+  }
+  for (j in 1:(nc-1)){
+    Fr <- faa[nr-1, nc-j]
+    res <- cohort_analysis(Fr, nr, nc-j)
+    faa <- res$faa
+    naa <- res$naa  
+  }
+    
+  return(list(faa=faa, naa=naa))
+}
+
+nr <- nrow(dat$catch)
+nc <- ncol(dat$catch)
+f_vpa <- function(p) {
+  res <- vpa(p, dat)
+  res$faa[nr, nc]/res$faa[nr-1,nc]-1
+}
+log_F_AT <- uniroot(f_vpa,c(0.01,3))$root
+( F_AT_est <- exp(log_F_AT) )
+
+library(tidyverse)
+res <- vpa(log_F_AT, dat)
+colnames(res$naa) <- substr(colnames(dat$catch),2,5)
+dat1 <- res$naa %>% as.data.frame() %>% tibble::rownames_to_column("age") %>% pivot_longer(!age, names_to = "year", values_to = "value") %>% mutate_at(vars(year), as.factor)
+dat1$age <- as.numeric(dat1$age)-1
+dat1 <- dat1 %>% mutate_at(vars(age), factor, levels=7:0)
+range <- seq(0,100,len=5)
+range <- range[1:(length(range)-1)]
+ggplot(dat1,aes(x=year, y=age)) + geom_point(aes(size=value, fill=age, color=age), alpha = 0.75, shape = 21) + coord_fixed(ratio=2) + scale_size_continuous(limits = c(0.0001, 1.0001)*max(dat1$value,na.rm=TRUE), range = c(1,10), breaks = round(range*max(dat1$value,na.rm=TRUE)/100,digits=0))+theme_bw() + theme(axis.text.x = element_text(angle = 90, hjust = 1), panel.background = element_blank(), panel.border = element_rect(colour = "black", fill = NA, size = 1.2)) + labs(x="Year", y="Age", size="Population Size") + guides(color="none", fill="none")
+
+vpa2 <- function(p, dat, replace_zero_catch=0.1){
+  F_T <- exp(p)
+  F_AT <- last(F_T)
+  
+  caa <- as.matrix(dat$catch)
+  caa[caa==0] <- replace_zero_catch
+  M <- dat$M
+  nr <- nrow(caa)
+  nc <- ncol(caa)
+  
+  naa <- faa <- matrix(NA, nr, nc)
+  
+  cohort_analysis <- function(fr,i,j){
+    faa[i, j] <- fr
+    naa[i, j] <- caa[i, j]*exp(M/2)*(1-exp(-faa[i, j]))
+  
+    for (k in 1:i){
+      if (i-k > 0 & j-k >0){
+        naa[i-k, j-k] <- (naa[i-(k-1), j-(k-1)]*exp(M/2)+caa[i-k, j-k])*exp(M/2)
+        faa[i-k, j-k] <- -log(1-caa[i-k, j-k]*exp(M/2)/naa[i-k, j-k])
+      }
+    }
+    return(list(faa=faa, naa=naa))
+  }
+  
+  res <- cohort_analysis(F_AT, nr, nc)
+  faa <- res$faa
+  naa <- res$naa
+  
+  for (i in 1:(nr-1)){
+    Fr <- F_T[nr-i]
+    res <- cohort_analysis(Fr, nr-i, nc)
+    faa <- res$faa
+    naa <- res$naa
+  }
+  for (j in 1:(nc-1)){
+    Fr <- faa[nr-1, nc-j]
+    res <- cohort_analysis(Fr, nr, nc-j)
+    faa <- res$faa
+    naa <- res$naa  
+  }
+    
+  return(list(faa=faa, naa=naa))
+}
+
+set.seed(1)
+cpue <- matrix(log(seq(100,5,len=nc))+rnorm(nc*(nr-1),0,0.4), nrow=nr-1, ncol=nc, byrow=TRUE)
+dat$log_cpue <- cpue
+f_vpa2 <- function(p) {
+  res2 <- vpa2(p, dat)
+  log_cpue <- dat$log_cpue
+  log_q <- sapply(1:(nr-1), function(i) mean(log_cpue[i,] - log(res2$naa[i,])))
+  log_q <- matrix(rep(log_q,each=nc),nr-1,nc,byrow=TRUE)
+  sum((log_cpue-log_q-log(res2$naa[1:(nr-1),]))^2)
+}
+log_F_T <- nlm(f_vpa2,log(rep(1,7)))$estimate
+F_T_est <- exp(log_F_T) 
+res2 <- vpa2(log_F_T,dat)
+N1 <- colSums(res$naa)
+N2 <- colSums(res2$naa)
+N1 <- N1/N1[1]
+N2 <- N2/N2[1]
+dat_for_plot <- data.frame(Year=as.numeric(rep(colnames(res$naa),2)),Type=factor(rep(c("No tuned","Tuned"),each=nc)),PopSize=c(N1,N2))
+ggplot(dat_for_plot, aes(x=Year,y=PopSize,color=Type))+geom_line()+labs(y="Relative Population Size")+geom_hline(yintercept=0.05,linetype="dashed")+theme_bw()
