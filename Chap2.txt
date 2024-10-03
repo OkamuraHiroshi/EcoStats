@@ -1,0 +1,204 @@
+## 2 - 1 確率変数の種類
+
+# 一様分布のグラフ
+plot(NA, xlim=c(0,1), ylim=c(0,1), xlab="Variable", ylab="Probability", frame.plot=FALSE)      # x軸，y軸とも0から1の範囲の座標を設定
+segments(0,0,0,1,col="blue")   # (0,0)から(0,1)へ線分を引く
+segments(0,1,1,1,col="blue")   # (0,1)から(1,1)へ線分を引く
+segments(1,1,1,0,col="blue")   # (1,1)から(1,0)へ線分を引く
+
+## 2 - 2 正規分布
+
+par(mfrow=c(1,2))     # 図を縦に2個描きますよという指令
+curve(dnorm, from=-3, to=3, main="確率密度関数")    # 最初に正規分布の密度関数を描く
+curve(pnorm, from=-3, to=3, main="累積分布関数")    # 次に正規分布の累積分布を描く
+
+qnorm(1-c(0.1,0.05,0.025,0.01,0.005))     # 標準正規分布の確率点を与える
+
+# 中心極限定理
+set.seed(1)     # 乱数のseedを設定
+par(mfrow=c(2,2))     # 図を4つ（2×2）作成
+for (i in c(7,20,100,500)){     # サンプルサイズを7，20，100，500に設定
+  x1 <- matrix(sample(c(0,1),i*1000,prob=c(0.8,0.2),replace=TRUE),nrow=i)    # p=0.2で1，0.8で0となるサンプルサイズiの二値データを1000個作成
+  hist(colMeans(x1),breaks=10,main=paste("n =",i),col="blue",xlab="Mean")    # 各サンプルサイズのデータに対して平均値を1000個計算してヒストグラムを描画
+}
+
+library(MASS)     # MASS packageを読み込む
+data(cats)       # catsデータを読み込み
+dat <- cats      # datにcatsデータをコピー
+dat_F <- subset(dat, Sex=="F")      # datの中の雌のデータをdat_Fとする
+dat_M <- subset(dat, Sex=="M")      # datの中の雄のデータをdat_Mとする
+n1 <- nrow(dat_F); n2 <- nrow(dat_M)        # dat_F，dat_Mのサンプルサイズをn1，n2とする
+s <- sqrt(((n1-1)*var(dat_F$Bwt)+(n2-1)*var(dat_M$Bwt))/(n1+n2-2))     # 2つの分散を合併した分散の平方根（2集団で分散は等しいと仮定していることになる）
+( test_stat <- (mean(dat_F$Bwt)-mean(dat_M$Bwt))/(s*sqrt(1/n1+1/n2)) )    # 2標本のt検定の検定統計量を計算
+
+( pnorm(test_stat) )    # 上の検定統計量に対して正規分布でP値を計算
+
+( pt(test_stat, n1+n2-2) )     # 上の検定統計量に対してt分布でP値を計算
+
+n <- 100; Sim <- 100      # nはサンプルサイズ，Simはシミュレーションの回数
+include <- NULL     # 信頼区間が真値を含むかどうかを表す変数
+set.seed(1)     # 乱数のseed
+plot(1:Sim, rep(0,Sim), type="l", lty=2, xlab="Iteration (繰り返し数)", ylab="Confidence Interval (信頼区間)")       # x軸をシミュレーション回数とし，真値に線を引く
+for (i in 1:Sim){
+  x <- rnorm(n)       # n個の標準正規乱数
+  alpha <- 0.05      # 有意水準
+  z <- qnorm(1-alpha/2)         # 1-有意水準/2の標準正規の上側確率点
+  ci <- c(mean(x)-z*sd(x)/sqrt(n), mean(x)+z*sd(x)/sqrt(n))     # 正規信頼区間
+  include <- c(include, ci[1] < 0 & ci[2] > 0)     # 信頼区間が真値を含んでいればTRUE，そうでなければFALSE
+  segments(i, ci[1], i, ci[2], col=ifelse(tail(include,1),"blue",gray(0.3)))    # グラフに信頼区間を上書き
+}
+
+curve(dlnorm, from=0, to=8)      # 対数正規分布の密度関数
+abline(v=exp(0+1/2), lty=2, col="blue")        # 平均値の線
+
+library(mvtnorm)      # 多変量正規分布や多変量t分布を扱うパッケージ
+
+mu <- c(mean(cats$Bwt), mean(cats$Hwt))       # 猫の体重と心臓重量の平均値
+Sigma <- cov(cbind(cats$Bwt, cats$Hwt))       # 体重と心臓重量の分散共分散行列
+
+x <- seq(1.5, 4, by=0.1)     # x軸（体重）の範囲設定
+y <- seq(3, 18, by=0.1)      # y軸（心臓重量）の範囲設定
+f <- function(x, y) dmvnorm(cbind(x, y), mu, Sigma)           # x軸とy軸の値に対して二変量正規密度関数を計算する関数
+z <- outer(x, y, f)     # xとyに対する密度関数の値
+
+contour(x, y, z, xlab="体重 (kg)", ylab="心臓重量 (g)", main="Bivariate normal distribution")       # 等高線図をプロット
+
+## 2 - 3 ガンマ分布
+
+curve(dgamma(x, shape=1, rate=2), from=0, to=10, ylab="Density")      # ガンマ分布の密度関数（shape=1，rate=2のとき）
+curve(dgamma(x, shape=2, rate=2), from=0, to=10, lty=2, add=TRUE)       # ガンマ分布の密度関数（shape=2，rate=2のとき）
+curve(dgamma(x, shape=4, rate=1), from=0, to=10, lty=3, add=TRUE)       # ガンマ分布の密度関数（shape=4，rate=1のとき）
+legend("topright",c(expression(paste(alpha,"=",1,": ",lambda,"=",2)),expression(paste(alpha,"=",2,": ",lambda,"=",2)),expression(paste(alpha,"=",4,": ",lambda,"=",1))), lty=1:3)       # 凡例を作成
+
+## 2 - 4 二項分布
+
+set.seed(1)        # 乱数のseedを設定
+n <- 10; p <- 0.3        # 試行回数10，成功確率0.3に設定
+x <- rbinom(10000,n,p)       # Bi(n,p)に従う成功回数の乱数を10000個作成
+print(c(mean(x), n*p))       # ランダムに作成したものの平均値と理論値があっているか確認
+print(c(var(x), n*p*(1-p)))      # ランダムに作成したものの分散と理論値があっているか確認
+
+n <- 10       # 試行回数10
+x <- 0:10      # 成功回数0~10
+plot(x, dbinom(x, n, 0.1), pch=16, ylab="Binomial Probability")      # 成功確率が0.1のときの二項分布の確率分布のグラフ
+points(x, dbinom(x, n, 0.5), pch=2, col="blue")       # 成功確率が0.5のときの二項分布の確率分布のグラフ（前のに重ね描き）
+legend("topright", c("p = 0.1", "p = 0.5"), pch=c(16,2), col=c("black","blue"))         # 凡例を作成
+
+set.seed(1)       # 乱数のseedを設定
+p <- 0.5        # ランダムウォークの左右（1か-1か）移動確率p=0.5
+x <- matrix(NA, nrow=1000, ncol=1000)  # 1000回繰り返しのランダムウォークを1000個作成
+x[1,] <- rep(0,1000)  # ランダムウォークの初期位置を0に設定
+for (i in 1:999) x[i+1,] <- x[i,] + (1-2*rbinom(1000,1,p))  # ランダムウォークのstep 2から1000  
+par(mfrow=c(1,3))       # 図を横に3つ描きます
+plot(sapply(1:1000, function(i) mean(x[i,])), type="l", lwd=2, xlab="Time Step", ylab="Mean")       # 最初の図はランダムウォークの平均値
+plot(sapply(1:1000, function(i) var(x[i,])), type="l", lwd=2, xlab="Time Step", ylab="Variance")       # 真ん中の図はランダムウォークの分散
+hist(x[1000,])        # 最後のの図は1000回繰り返した後の位置のヒストグラム
+
+library(scatterplot3d)     # scatterplot3dパッケージを読み込み
+n <- 5      # 試行回数を設定
+p <- c(0.2, 0.5, 0.3)       # 3つのカテゴリが選ばれる確率を設定
+x <- expand.grid(x1=0:n, x2=0:n)    # x1とx2の値を設定
+x <- x[rowSums(x) <= n, ]     # x1とx2の和がn以下になるものだけ抽出
+x <- cbind(x, x3 = n - x$x1 - x$x2)      # x3を付け加える
+z <- apply(x, 1, function(x) dmultinom(x, size=n, prob=p))     # 多項分布の確率を計算．apply(x, 1, function(x) ...)は，行列xの各行にfunction(x)を適用した結果を出力する
+scatterplot3d(x[,1],x[,2],z,color="blue",pch=16,angle=30,xlab="x1",ylab="x2",zlab="Probability")      # x1とx2をx軸，y軸とし，多項分布の確率をz軸にした3次元プロット
+
+## 2 - 5 ポアソン分布と負の二項分布
+
+set.seed(1)       # 乱数のseed設定
+x <- rpois(10000, lambda=2)        # 平均2のポアソン乱数を10000個作成
+mean(x)      # 平均
+var(x)       # 分散（ポアソン分布から出たデータの場合，平均と分散が同じになるはず）
+
+xx <- barplot(table(x), ylab="Frequency", ylim=c(0,max(table(x))*1.2))     # 上記ポアソン変数のヒストグラム描画
+points(xx,10000*dpois(0:9, lambda=2), col="blue", pch=16, cex=1.5)    # 理論値をプロット
+
+set.seed(1)      # 乱数のseed設定
+x <- rbinom(1000, size=100000, prob=0.00005)       # 二項分布（np=5）に従うデータを1000個発生
+y <- rpois(1000, lambda=5)       # 平均5のポアソン分布に従うデータを発生
+par(mfrow=c(1,2))         # 横に2つのグラフを作成するとレイアウトを指定
+barplot(table(x), main="Binomial")      # 二項分布のプロット
+barplot(table(y), main="Poisson")       # ポアソン分布のプロット（2つのプロットは似ているはず）
+
+set.seed(1)      # 乱数のseed設定
+x1 <- rpois(10000, lambda=2)       # 平均2のポアソン分布に従うデータを発生
+x2 <- rpois(10000, lambda=3)       # 平均3のポアソン分布に従うデータを発生
+y <- cbind(x1, x2)       # 2つのデータを結合
+y <- subset(y, x1 + x2 == 5)      # 全数が5のものだけ取り出す
+par(mfrow=c(1,2))         # 横に2つのグラフを作成するとレイアウトを指定
+barplot(table(y[,1]), main="ポアソン分布")          # 全数を5に限定したときのポアソン分布のx1のヒストグラム
+z <- rbinom(nrow(y),size=5,prob=2/(2+3))         # 試行数5で，確率が2/5の二項分布に従うデータをはに限定したときのポアソン分布のx1のヒストグラム
+barplot(table(z), main="二項分布")         # 全数を5に限定したときのポアソン分布のx1のヒストグラム（2つのプロットは似ているはず）
+
+set.seed(123)        # 乱数のseedを設定
+n <- 50       # 作成するデータの数
+x <- runif(n,0,50)       # 0から50の一様乱数をn個作成
+z <- floor(x)   #  小数部分を打ち切ることにより，区画を設定
+m <- table(z)   #  区画に入る個数をカウント
+zz <- rep(0,n)    # すべて0のn個のデータを作成
+zz[0:(n-1) %in% as.numeric(names(m))] <- m    #  tableの個数カウントは0が入らないので，0となった区画を復元
+( zz_stat <- c(mean(zz), var(zz)) )    #  平均と分散を比較（ポアソン分布に従うことが期待されるので，等しくなるはず）
+tab_zz <- table(zz)       # zzの表データ
+x <- barplot(tab_zz)      # 表データから棒グラフを作成
+points(x, dpois(as.numeric(names(tab_zz)),lambda=zz_stat[1])*sum(zz), col="blue", pch=16, cex=1.2)      # ポアソン分布の理論値を上描き
+
+set.seed(1)       # 乱数のseed
+x <- rnbinom(1000, size=0.3, mu=2)     # 負の二項分布
+mean(x)      # 平均値
+c(var(x), 2+2^2/0.3)      # 分散とその理論値
+barplot(table(x), col="blue")      # データのヒストグラム
+
+x <- c(1,3,7,0,2,2,0,1,2,8)     # チュパカブラ観測データ
+set.seed(1)     # 乱数のseed
+out <- NULL     # シミュレーション結果の入れ物 
+for (i in 1:1000) {
+  x_b <- rpois(length(x), mean(x))      # xの要素数と平均を持つポアソンデータを生成
+  out <- c(out, var(x_b)/mean(x_b))     # 平均と分散の比をとっておく
+}
+hist(out, main="Null Model (Poisson)")     # 1000回シミュレーションのポアソン乱数の平均と分散の比のヒストグラム
+abline(v=var(x)/mean(x), col="blue")      # 観測値の平均と分散の比
+( p_value <- mean(out > var(x)/mean(x)) )       # 観測値を越えるポアソンシミュレーションの結果の割合．この値が小さいなら，ポアソン分布を仮定したときにはめったに起こらないような観測値を得たということで，背理法的に，仮定=ポアソン分布が間違っていた，と仮定を棄却する．チュパカブラはポアソン分布ではなく，集中分布しているのだろう，と
+
+## 2 - 6 その他の確率分布と混合分布
+
+# EM algorithm
+data(cats)        # catsという猫の体重と心臓重量のデータをloadする
+dat <- cats       # datにcatsをコピー
+b <- log(dat$Bwt)      # bは体重量の対数値
+pi_0 <- c(0.5, 0.5); mu_0 <- c(0.7, 1.2); sd_0 <- c(0.1, 0.2)      # 混合率，平均，標準偏差の初期値を設定
+d <- 1      # 収束判定のための値
+pi_vec <- pi_0; mu_vec <- mu_0; sd_vec <- sd_0     # パラメータの変化をとっておくための入れ物
+while (d > 0.0001){    # dが0.0001より大きい間は以下を繰り返す
+  p1_F <- pi_0[1]*dnorm(b, mu_0[1], sd_0[1])     # パラメータとデータからp_{i,1}を計算
+  p1_M <- pi_0[2]*dnorm(b, mu_0[2], sd_0[2])     # パラメータとデータからp_{i,2}を計算 
+  p1 <- cbind(p1_F, p1_M)       # p_{i,j}の行列
+  p1 <- sweep(p1, 1, p1_F+p1_M, FUN="/")      # sweepでp1を行方向にその和で割ってやって規格化している
+  pi_1 <-  colMeans(p1)      # 混合率を更新
+  mu_1 <- c(sum(p1[,1]*b)/sum(p1[,1]), sum(p1[,2]*b)/sum(p1[,2]))    # 平均を更新
+  sd_1 <- sqrt(c(sum(p1[,1]*(b-mu_1[1])^2)/sum(p1[,1]), sum(p1[,2]*(b-mu_1[2])^2)/sum(p1[,2])))      # 標準偏差を更新
+  d <- max(abs(c(pi_1-pi_0, mu_1-mu_0, sd_1-sd_0)))    # 更新前後のパラメータの差の絶対値の最大値を収束判定の指標とする
+  pi_0 <- pi_1; mu_0 <- mu_1; sd_0 <- sd_1     # 更新前のパラメータを更新後のパラメータで上書き
+  pi_vec <- rbind(pi_vec, pi_0); mu_vec <- rbind(mu_vec, mu_0); sd_vec <- rbind(sd_vec, sd_0)     # パラメータの変化を記録するため更新パラメータを時系列的に記録していく
+}
+
+# EM結果と実際のデータ（真）の比較
+names(pi_1) <- c("pi_F","pi_M"); names(mu_1) <- c("mu_F", "mu_M"); names(sd_1) <- c("sd_F", "sd_M")     # パラメータの要素に名前をつける
+rbind("Est" = pi_1, "Obs" = c(nrow(subset(dat, Sex=="F")), nrow(subset(dat, Sex=="M")))/nrow(dat))     # 推定された雌雄率と実際の雌雄率の比較
+rbind("Est" = mu_1, "Obs" = c(mean(b[dat$Sex=="F"]), mean(b[dat$Sex=="M"])))     # 推定された雌雄の平均値と実際の雌雄の平均値の比較
+rbind("Est" = sd_1, "Obs" = c(sd(b[dat$Sex=="F"]), sd(b[dat$Sex=="M"])))     # 推定された雌雄の標準偏差と実際の雌雄の標準偏差の比較
+brs <- seq(0.5,1.5,by=0.1)     # ヒストグラムの分割の指定
+h1 <- hist(b[dat$Sex=="M"], col=rgb(0, 1, 0, alpha=0.3), breaks=brs, ylim=c(0,32), xlab="Body Weight (log)", main="")       # 雄のヒストグラムを描画
+h2 <- hist(b[dat$Sex=="F"], col=rgb(1, 0, 0, alpha=0.3), breaks=brs, add=TRUE)       # 雌のヒストグラムを描画
+curve(0.1*sum(h1$count)*dnorm(x, mu_1[2], sd_1[2]), col="blue", add=TRUE)       # EMアルゴリズムから推定された雄の分布を上書き
+curve(0.1*sum(h2$count)*dnorm(x, mu_1[1], sd_1[1]), col="red", add=TRUE)       # EMアルゴリズムから推定された雌の分布を上書き
+
+# EMアルゴリズムが収束する様子
+par(mfrow=c(1,3))      # 図を3個横に並べます
+matplot(pi_vec, col=c(1,4), xlab="Iteration", ylab="pi")    # 最初の図は混合率の変化
+matplot(mu_vec, col=c(1,4), xlab="Iteration", ylab="mu")    # 次の図は平均の変化
+matplot(sd_vec, col=c(1,4), xlab="Iteration", ylab="sigma")      # 最後は標準偏差の変化
+
+EV <- sum(pi_1*sd_1^2)       # 分散の期待値
+VE <- sum(pi_1*(mu_1-c(pi_1%*%mu_1))^2)      # 期待値の分散
+V <- EV + VE       # 雌雄を併せた分散
+c( sqrt(V), sd(b) )      # 理論値と観測値の比較
