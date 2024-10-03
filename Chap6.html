@@ -219,15 +219,178 @@ mod_td1 <- glmmTMB(Catch~ Year+(1|Month)+(1|Grid)-1,offset=log(Effort),family=tw
 mod_td2 <- glmmTMB(Catch~ Year+(1|Month)+(1|Grid)+(1|Year:Month)+(1|Year:Grid)-1,offset=log(Effort),family=tweedie,data=dat)         # 上と同じ設定で，月と場所，年と月の交互作用，年と場所の交互作用をランダム効果にして加えたモデル
 AIC(mod_td0,mod_td1,mod_td2)        # 3つのモデルのAICを比較
 
-pred0 <- exp(mod_td0$fit$parfull[names(mod_td0$fit$parfull)=="beta"])
-pred1 <- exp(mod_td1$fit$parfull[names(mod_td1$fit$parfull)=="beta"])
-pred2 <- exp(mod_td2$fit$parfull[names(mod_td2$fit$parfull)=="beta"])
-pred0 <- pred0/mean(pred0)
-pred1 <- pred1/mean(pred1)
-pred2 <- pred2/mean(pred2)
-Year <- as.numeric(as.character(unique(dat$Year)))
-dat_for_plot <- data.frame(Year=rep(Year,3), Model=factor(rep(0:2, each=length(Year))), CPUE=c(pred0,pred1,pred2))
-ggplot(dat_for_plot, aes(x=Year, y=CPUE, linetype=Model))+geom_line()+theme_bw()
+pred0 <- exp(mod_td0$fit$parfull[names(mod_td0$fit$parfull)=="beta"])      # 上のモデルmod_td0による年の効果（固定効果）から計算した個体数指標値
+pred1 <- exp(mod_td1$fit$parfull[names(mod_td1$fit$parfull)=="beta"])      # 上のモデルmod_td1による年の効果（固定効果）から計算した個体数指標値
+pred2 <- exp(mod_td2$fit$parfull[names(mod_td2$fit$parfull)=="beta"])      # 上のモデルmod_td2による年の効果（固定効果）から計算した個体数指標値
+pred0 <- pred0/mean(pred0)         # 比較するためにpred0を平均で割って基準化（傾向がとらえられれば良いので高さはあまり関係ない）
+pred1 <- pred1/mean(pred1)         # 比較するためにpred1を平均で割って基準化
+pred2 <- pred2/mean(pred2)         # 比較するためにpred2を平均で割って基準化
+Year <- as.numeric(as.character(unique(dat$Year)))        # グラフ化のため年のラベルを抽出
+dat_for_plot <- data.frame(Year=rep(Year,3), Model=factor(rep(0:2, each=length(Year))), CPUE=c(pred0,pred1,pred2))         # モデルごとに各年の予測値（個体数指標値）を入れたデータを作成
+ggplot(dat_for_plot, aes(x=Year, y=CPUE, linetype=Model))+geom_line()+theme_bw()         # モデルごとの標準化CPUE推定値の描画
+
+## 6 - 4  除去法による個体数推定
+
+delury <- read.csv("Delury.csv")
+del2000 <- subset(delury,Year==2000)
+del2000$CC <- cumsum(del2000$Catch)
+mod_del <- lm(CPUE~CC,data=del2000)
+q <- -mod_del$coef[2]
+N0 <- mod_del$coef[1]/q
+p1 <- ggplot(del2000, aes(x=CC, y=CPUE))+geom_point()+labs(x="Cumulative Catch", y="CPUE")+theme_bw()
+del2000_add <- rbind(del2000, c(NA,NA,0,0,NA,N0))
+del2000_add <- cbind(del2000_add, pred_CPUE=q*N0-q*del2000_add$CC)
+( p2 <- p1+geom_line(data=del2000_add, aes(x=CC, y=pred_CPUE), color="blue", linetype="dashed")+annotate("text", x=65000, y=0.1, label=paste0("N0 =", round(N0))) )
+
+dN0 <- c(1/(-mod_del$coef[2]), mod_del$coef[1]/mod_del$coef[2]^2)
+SE_N0 <- sqrt(t(dN0)%*%vcov(mod_del)%*%dN0)
+CV_N0 <- SE_N0/N0
+C_N0 <- exp(qnorm(1-0.05/2)*sqrt(log(1+CV_N0^2)))
+( CI_N0 <- c(N0/C_N0, N0*C_N0) )
+
+del_res <- lapply(1987:2000, function(i) lm(CPUE~cumsum(Catch),data=subset(delury, Year==i)))
+lm_res <- sapply(1:length(del_res), function(i) c(-del_res[[i]]$coef[2], -del_res[[i]]$coef[1]/del_res[[i]]$coef[2]))
+lm_res <- as.data.frame(lm_res)
+names(lm_res) <- 1987:2000
+rownames(lm_res) <- c("q","N0")
+dat1 <- as.data.frame(t(lm_res)) %>% rownames_to_column(var="Year")
+pp1 <- ggplot(dat1, aes(x=Year, y=q))+geom_point(color="blue")+scale_x_discrete(breaks=seq(1987,2000,3))+theme_bw()
+pp2 <- ggplot(dat1, aes(x=Year, y=N0))+geom_point(color="blue")+scale_x_discrete(breaks=seq(1987,2000,3))+theme_bw()
+cowplot::plot_grid(pp1, pp2)
+
+## 6 - 5　コホート解析
+
+library(TropFishR)
+data(whiting)
+dat <- whiting
+vpa <- function(p, dat, replace_zero_catch=0.1){
+  F_AT <- exp(p)
+  
+  caa <- as.matrix(dat$catch)
+  caa[caa==0] <- replace_zero_catch
+  M <- dat$M
+  nr <- nrow(caa)
+  nc <- ncol(caa)
+  
+  naa <- faa <- matrix(NA, nr, nc)
+  
+  cohort_analysis <- function(fr,i,j){
+    faa[i, j] <- fr
+    naa[i, j] <- caa[i, j]*exp(M/2)*(1-exp(-faa[i, j]))
+  
+    for (k in 1:i){
+      if (i-k > 0 & j-k >0){
+        naa[i-k, j-k] <- (naa[i-(k-1), j-(k-1)]*exp(M/2)+caa[i-k, j-k])*exp(M/2)
+        faa[i-k, j-k] <- -log(1-caa[i-k, j-k]*exp(M/2)/naa[i-k, j-k])
+      }
+    }
+    return(list(faa=faa, naa=naa))
+  }
+  
+  res <- cohort_analysis(F_AT, nr, nc)
+  faa <- res$faa
+  naa <- res$naa
+  
+  for (i in 1:(nr-1)){
+    Fr <- faa[nr-i, nc-1]
+    res <- cohort_analysis(Fr, nr-i, nc)
+    faa <- res$faa
+    naa <- res$naa
+  }
+  for (j in 1:(nc-1)){
+    Fr <- faa[nr-1, nc-j]
+    res <- cohort_analysis(Fr, nr, nc-j)
+    faa <- res$faa
+    naa <- res$naa  
+  }
+    
+  return(list(faa=faa, naa=naa))
+}
+
+nr <- nrow(dat$catch)
+nc <- ncol(dat$catch)
+f_vpa <- function(p) {
+  res <- vpa(p, dat)
+  res$faa[nr, nc]/res$faa[nr-1,nc]-1
+}
+log_F_AT <- uniroot(f_vpa,c(0.01,3))$root
+( F_AT_est <- exp(log_F_AT) )
+
+library(tidyverse)
+res <- vpa(log_F_AT, dat)
+colnames(res$naa) <- substr(colnames(dat$catch),2,5)
+dat1 <- res$naa %>% as.data.frame() %>% tibble::rownames_to_column("age") %>% pivot_longer(!age, names_to = "year", values_to = "value") %>% mutate_at(vars(year), as.factor)
+dat1$age <- as.numeric(dat1$age)-1
+dat1 <- dat1 %>% mutate_at(vars(age), factor, levels=7:0)
+range <- seq(0,100,len=5)
+range <- range[1:(length(range)-1)]
+ggplot(dat1,aes(x=year, y=age)) + geom_point(aes(size=value, fill=age, color=age), alpha = 0.75, shape = 21) + coord_fixed(ratio=2) + scale_size_continuous(limits = c(0.0001, 1.0001)*max(dat1$value,na.rm=TRUE), range = c(1,10), breaks = round(range*max(dat1$value,na.rm=TRUE)/100,digits=0))+theme_bw() + theme(axis.text.x = element_text(angle = 90, hjust = 1), panel.background = element_blank(), panel.border = element_rect(colour = "black", fill = NA, size = 1.2)) + labs(x="Year", y="Age", size="Population Size") + guides(color="none", fill="none")
+
+vpa2 <- function(p, dat, replace_zero_catch=0.1){
+  F_T <- exp(p)
+  F_AT <- last(F_T)
+  
+  caa <- as.matrix(dat$catch)
+  caa[caa==0] <- replace_zero_catch
+  M <- dat$M
+  nr <- nrow(caa)
+  nc <- ncol(caa)
+  
+  naa <- faa <- matrix(NA, nr, nc)
+  
+  cohort_analysis <- function(fr,i,j){
+    faa[i, j] <- fr
+    naa[i, j] <- caa[i, j]*exp(M/2)*(1-exp(-faa[i, j]))
+  
+    for (k in 1:i){
+      if (i-k > 0 & j-k >0){
+        naa[i-k, j-k] <- (naa[i-(k-1), j-(k-1)]*exp(M/2)+caa[i-k, j-k])*exp(M/2)
+        faa[i-k, j-k] <- -log(1-caa[i-k, j-k]*exp(M/2)/naa[i-k, j-k])
+      }
+    }
+    return(list(faa=faa, naa=naa))
+  }
+  
+  res <- cohort_analysis(F_AT, nr, nc)
+  faa <- res$faa
+  naa <- res$naa
+  
+  for (i in 1:(nr-1)){
+    Fr <- F_T[nr-i]
+    res <- cohort_analysis(Fr, nr-i, nc)
+    faa <- res$faa
+    naa <- res$naa
+  }
+  for (j in 1:(nc-1)){
+    Fr <- faa[nr-1, nc-j]
+    res <- cohort_analysis(Fr, nr, nc-j)
+    faa <- res$faa
+    naa <- res$naa  
+  }
+    
+  return(list(faa=faa, naa=naa))
+}
+
+set.seed(1)
+cpue <- matrix(log(seq(100,5,len=nc))+rnorm(nc*(nr-1),0,0.4), nrow=nr-1, ncol=nc, byrow=TRUE)
+dat$log_cpue <- cpue
+f_vpa2 <- function(p) {
+  res2 <- vpa2(p, dat)
+  log_cpue <- dat$log_cpue
+  log_q <- sapply(1:(nr-1), function(i) mean(log_cpue[i,] - log(res2$naa[i,])))
+  log_q <- matrix(rep(log_q,each=nc),nr-1,nc,byrow=TRUE)
+  sum((log_cpue-log_q-log(res2$naa[1:(nr-1),]))^2)
+}
+log_F_T <- nlm(f_vpa2,log(rep(1,7)))$estimate
+F_T_est <- exp(log_F_T) 
+res2 <- vpa2(log_F_T,dat)
+N1 <- colSums(res$naa)
+N2 <- colSums(res2$naa)
+N1 <- N1/N1[1]
+N2 <- N2/N2[1]
+dat_for_plot <- data.frame(Year=as.numeric(rep(colnames(res$naa),2)),Type=factor(rep(c("No tuned","Tuned"),each=nc)),PopSize=c(N1,N2))
+ggplot(dat_for_plot, aes(x=Year,y=PopSize,color=Type))+geom_line()+labs(y="Relative Population Size")+geom_hline(yintercept=0.05,linetype="dashed")+theme_bw()
+
 
 
 
