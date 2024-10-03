@@ -260,9 +260,9 @@ cowplot::plot_grid(pp1, pp2)       # 2つの図を並べて表示
 
 ## 6 - 5　コホート解析
 
-library(TropFishR)
-data(whiting)
-dat <- whiting
+library(TropFishR)      # TropFishRパッケージを読み込み
+data(whiting)        # whitingデータを読み込み
+dat <- whiting         # whitingデータをdatにコピー
 vpa <- function(p, dat, replace_zero_catch=0.1){
   F_AT <- exp(p)
   
