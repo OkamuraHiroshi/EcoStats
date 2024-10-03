@@ -1,10 +1,4 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-</head>
- 
-<body>
+###  線形回帰モデルのさらなる拡張
 
 ## 4 - 1 過分散
 
@@ -304,6 +298,3 @@ preds <- exp(c(pred_lm, pred_ridge, pred_lasso))       # 制約なしの線形�
 colnames(betas) <- names(preds) <- c("lm","ridge", "lasso")      # 列名を指定
 betas       # 回帰係数の比較
 preds       # 予測結果の比較
-
-</body>
-</html>
