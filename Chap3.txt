@@ -1,0 +1,189 @@
+## 3 - 1 線形回帰モデル（単回帰）
+
+library(MASS)      # MASSパッケージを読み込み
+dat <- Animals        # Animalsデータ（動物の体重と脳重量のデータセット）をdatにコピー．Animalsデータの中身の詳細については，?Animalsで確認
+head(dat, 3)      # データの上側を表示してデータの中身を見る（デフォルトでは上側6行だが，3行を表示）
+
+plot(dat$body, dat$brain, xlab="Body size (kg)", ylab="Brain size (g)")     # 体重を横軸に脳重量を縦軸にプロットする
+
+( res <- lm(brain~body, data=dat) )      # y=brain，x=bodyとした線形回帰y=a+bxを実行．結果をresに格納
+
+plot(dat$body, dat$brain, xlab="Body size (kg)", ylab="Brain size (g)")     # 再び上と同じ図を作成
+abline(a=res$coef[1], b=res$coef[2], col="blue")      # 推定した直線を上描きする
+
+( res2 <- lm(brain~body, data=subset(dat, body < 20000)) )       # 体重が20000よりも小さいデータだけに制限して直線を適合させる
+
+plot(dat$body, dat$brain, xlab="Body size (kg)", ylab="Brain size (g)")        # 上と同じようにデータの散布図を作成
+abline(a=res$coef[1], b=res$coef[2], col="gray")          # 全データに対する直線をプロット
+abline(a=res2$coef[1], b=res2$coef[2], col="blue")          # 制限したデータに対する直線をプロット
+
+dat$log_brain <- log(dat$brain)      # 対数変換した脳重量を新たな変数とする
+dat$log_body <- log(dat$body)      # 対数変換した脳重量を新たな変数とする
+res3 <- lm(log_brain~log_body, data=dat)        # 対数変換した変数に対して直線回帰を実行
+plot(dat$log_body, dat$log_brain, xlab="log Body size", ylab="log Brain size")       # 観測データ（対数値）の散布図を作成
+abline(a=res3$coef[1], b=res3$coef[2], col="blue")       # 推定した直線を上描き
+
+resid <- residuals(res)       # 対数とらない場合の直線回帰の残差
+resid3 <- residuals(res3)       # 対数とった場合の直線回帰の残差
+par(mfrow=c(1,2))         # 図を横に2つ並べる
+hist(resid)         # 対数をとらない場合の残差のヒストグラム
+hist(resid3)         # 対数をとった場合の残差のヒストグラム
+
+## 3 - 2 線形回帰モデル（カテゴリカル変数と交互作用）
+
+rownames(dat)      # datの行名（ここでは動物の名前）を表示
+
+dat$type <- rep("M", nrow(dat))      # typeという変数を追加して，"M"というラベルとする（"M"はmammalの頭文字）
+dat$type[c(6,16,26)] <- "D"       # 6, 16, 26行目は恐竜なので，ラベルを"D"（dinosaurの頭文字）に変更
+dat$type <- factor(dat$type)      # typeを文字列からカテゴリー変数に変換
+dat[dat$type=="D",]       # typeが"D"になっているデータを表示
+
+res4 <- lm(brain/body ~ type, data=dat)      # type（"M"か"D"）によって体重と脳重量の比に違いがあるかを検討
+summary(res4)       # 上の直線回帰結果の詳細を表示
+
+res4_1 <- lm(brain/body ~ type - 1, data=dat)     # 上の回帰だと，恐竜を基準にした哺乳類のものとなるが，切片を除くことにより，恐竜と哺乳類の平均を表示する
+summary(res4_1)      # 結果の詳細を表示
+
+res5 <- lm(log_brain ~ log_body*type, data=dat)       # typeとlog-体重とその交互作用を入れた回帰モデル
+round(summary(res5)$coef, 2)       # 回帰係数の結果を表示
+
+colors <- ifelse(dat$type=="D","black","blue")      # 色の設定．type="D"なら黒，"M"なら青
+par(mfrow=c(1,2))       # 横に並べて2つの図
+plot(dat$log_body, dat$log_brain, xlab="log Body size", ylab="log Brain size", col=colors, pch=16)         # 色分けして対数体重と対数脳重量の観測値をプロット
+abline(a=res5$coef[1], b=res5$coef[2], col="black")     # 恐竜の回帰直線
+abline(a=res5$coef[1]+res5$coef[3], b=res5$coef[2]+res5$coef[4], col="blue")     # 哺乳類の回帰直線
+hist(residuals(res5))      # typeとlog-体重とその交互作用を入れた回帰モデルの残差のヒストグラム
+
+## 3 - 3 線形回帰モデル（重回帰と過剰適合問題）
+
+dat_M <- subset(dat, type=="M")      # 哺乳類のデータだけを抽出
+
+poly_reg <- function(k) lm(log_brain~poly(log_body,degree=k,raw=TRUE),data=dat_M)       # 多項式回帰をするための関数
+Res <- lapply(1:9, function(k) poly_reg(k))     # 多項式の次数を1から9まで変えてモデルをフィット
+
+par(mfrow=c(3,3))      # 3行3列（全部で9枚）のグラフを描きます
+range_x <- range(dat_M$log_body)      #   x軸の値の範囲を設定
+newdat_x <- seq(range_x[1], range_x[2], length.out=100)       # x軸の値の範囲にxの一様な点を100個作る（あとで直線を描くのに必要）
+for (i in 1:9){      # iを1から9まで動かす
+plot(log_brain~log_body, data=dat_M, pch=16, main=paste("degree =", i), xlab="log body size", ylab="log brain size")        # 観測データのプロット
+lines(newdat_x, predict(Res[[i]],list(log_body=newdat_x)),col="blue")        # 1~9次の多項式回帰結果を上描き
+}
+
+sigma_sq <- sapply(1:9, function(k) sum((dat_M$log_brain - predict(Res[[k]]))^2)       # 次数1~9に対して二乗誤差の和を計算
+names(sigma_sq) <- paste0("degree", 1:9)      # 次数がなにかを示す名前を設定
+print(round(sigma_sq, 3))        # 次数による二乗誤差の和の変化
+
+# cross validation
+
+set.seed(123)           # 乱数のseed設定
+train_sp <- rownames(dat_M)[sample(nrow(dat_M),15)]       # 15個のデータをランダムに選んでtrainingデータとする（行名を選ぶ）
+train <- dat_M[rownames(dat_M) %in% train_sp,]         # trainingデータを生成
+test <- dat_M[!(rownames(dat_M) %in% train_sp),]       # trainingデータでないデータをtestデータとする
+poly_reg <- function(k) lm(log_brain~poly(log_body,degree=k,raw=TRUE),data=train)     # trainingデータを使用した次数kの多項式回帰
+Res1 <- lapply(1:9, function(k) poly_reg(k))       # 次数1~9の多項式回帰結果
+train_ss <- test_ss <- NULL       # training/testデータのsum of squared errors
+for (i in 1:9){
+   train_ss <- c(train_ss, sum((train$log_brain - predict(Res1[[i]]))^2))　　　　　# trainingデータの二乗誤差の和
+   test_ss <- c(test_ss, sum((test$log_brain - predict(Res1[[i]], newdata=test))^2))　　　　　# testデータの二乗誤差の和．predictの引数newdataをtestとすることで，予測のためのデータをtestに置き換えている
+}
+names(test_ss) <- paste0("degree",1:9)      # test_ssの要素の名前
+train_ss <- train_ss/max(train_ss)*1.2*max(test_ss)     # train_ssの値の変化をtest_ssの値と比較しやすいようにスケールを変えている
+plot(test_ss,type="l",col="blue",xlab="Degree",ylab="sigma_squared",ylim=range(test_ss, train_ss),lwd=2)      # 次数に対してtest_ssをプロット
+lines(train_ss,col="gray",lwd=2,lty=2)     # train_ssを上描き
+legend("topright",c("Test","Training"),col=c("blue","gray"),lty=c(1,2),lwd=2)     # 凡例を作成
+
+## 3 - 4 カルバックライブラー情報量
+
+for (p in c(0.01,0.2,0.5,0.99)) print( -(p*log(p)+(1-p)*log(1-p)), 3)      # 二項分布の情報エントロピーの計算例
+
+# AICのシミュレーション
+Res_aic <- NULL        # AICの結果を入れる入れ物
+Sim <- 10000        # シミュレーション回数
+set.seed(1234)        # 乱数のseedを設定
+for (n in c(10,100,500,1000)){      # サンプルサイズn=10, 100, 500, 1000を検討
+  z <- matrix(rnorm(n*Sim, 0, 1),nrow=Sim,ncol=n)        # サンプルサイズnの標準正規乱数を1000セット用意
+  TL <- apply(z,1,function(z) integrate(function(x) dnorm(x,0,1)*dnorm(x,mean(z),sqrt(var(z)*(n-1)/n),log=TRUE),-Inf,Inf)$value)      # KL情報量の第二項を計算
+  EL <- apply(z,1,function(z) mean(dnorm(z,mean(z),sqrt(var(z)*(n-1)/n),log=TRUE)))       # 観測データに基づく対数尤度の平均（KL情報量の第2項と比較して2/n程度のずれが生じることが期待される（2はパラメータ数（平均と分散）））
+  Res_aic <- cbind(Res_aic, n*(EL-TL))     # ELとTLの差を計算してn倍すれば2ぐらいになるとすると，AICがTLの良い近似になっているという確認になる
+}
+colnames(Res_aic) <- c(10,100,500,1000)     # Res_aicの要素の名前
+round(colMeans(Res_aic),3)      # 結果の表示（n=10の近似は悪いが，n>=100ならだいたい2になっている）
+
+AIC_table <- rbind(
+  logLik = round(sapply(1:9, function(i) logLik(Res[[i]])), 2),
+  np = sapply(1:9, function(i) attributes(logLik(Res[[i]]))$df),
+  AIC = round(sapply(1:9, function(i) AIC(Res[[i]])),2)
+)       # 異なる次数のモデルに対する対数尤度，パラメータ数，AICの比較表
+colnames(AIC_table) <- paste0("deg_",1:9)      # 表の列名を指定
+print(AIC_table)        # 表をプリント
+
+## 3 - 5 一般化線形モデル
+
+# 一般化線形モデルがエントロピー最大になっているという意味で自然なモデルであると考えられるという話
+
+dgnorm <- function(x, mu=0, alpha=sqrt(2), beta=2) beta/(2*alpha*gamma(1/beta))*exp(-(abs(x-mu)/alpha)^beta)          # 一般化正規分布の密度関数
+gn_ent <- function(x) -dgnorm(x,mu,alpha,beta)*log(dgnorm(x,mu,alpha,beta))     # 一般化正規分布のエントロピーを定義
+
+mu <- 0        # 平均を0とする
+entropy <- NULL        # 計算したエントロピーを入れる入れ物
+for (beta in seq(1,5,by=0.01)){     # betaを1から5まで0.01刻みで変える
+  alpha <- sqrt(gamma(1/beta)/gamma(3/beta))      # 分散=1であるとすると，alphaはbetaから計算できる
+
+  entropy <- rbind(entropy, c(beta, integrate(function(x) gn_ent(x), -5, 5)$value))       # 分散一定としたときのentropyを計算
+}
+entropy <- as.data.frame(entropy)       # そのままだとentropyはmatrixになっているので，data.frameに変更
+colnames(entropy) <- c("beta","entropy")       # 列名をbetaとentropyとする
+plot(entropy$beta, entropy$entropy, type="l", lwd=2, col="blue", xlab="beta", ylab="entropy")      # betaに対してentropyの曲線をプロット
+abline(v=2, lty=2, lwd=2, col="gray")     # beta=2のときに縦線を引けば，beta=2のentropyが最大になっていることがわかる
+
+## 3 - 6 ロジスティック回帰
+
+library(sizeMat)       # sizeMatというパッケージを読み込む
+data(matFish)       # sizeMatの中のmatFishというデータを読み込む（データの詳細は?matFishで確認）
+dat <- matFish        # matFishデータをdatにコピー
+head(dat)          # datの中身を確認
+
+dat$maturity <- ifelse(dat$stage_mat=="I",0,1)       # 成熟段階がIなら0，それ以外は1として，未成熟/成熟の2カテゴリーにする
+
+plot(maturity~total_length, data=dat)        # 全長に対する成熟状態のプロット
+res <- lm(maturity~total_length,data=dat)        # 全長に対する成熟状態に線形回帰をフィット
+abline(a=res$coef[1],b=res$coef[2],col="blue",lty=2)        # 線形回帰結果を上描き
+
+res2 <- glm(maturity~total_length, data=dat, family=binomial)       # 確率分布を二項分布として一般化線形モデル（ロジスティック回帰）をフィット
+
+mat_prop <- tapply(dat$maturity,dat$total_length,mean)       #   体長の分類による成熟割合を計算する．tapplyはapplyのtable版
+plot(unique(dat$total_length), mat_prop, xlab="total_length", ylab="maturity_proportion")         # 体長に対する成熟割合をプロット
+x_seq <- seq(0,70)         # 体長の範囲を設定（下のグラフを描く際に必要）
+lines(x_seq, predict(res2, list(total_length=x_seq), type="response"), col="blue")       # 体長範囲に対して，ロジスティック回帰によって予測した成熟割合の曲線を上描き
+
+tab_mat <- table(dat$total_length, dat$maturity)        # 同じ体長クラスに属する成熟個体数を集計
+dat2 <- data.frame(tot_len=as.numeric(rownames(tab_mat)), n=as.numeric(rowSums(tab_mat)), m=as.numeric(tab_mat[,2]))        # 体長クラス内の総数，成熟数に集計したものにデータを整形する
+res3 <- glm(cbind(m, n-m) ~ tot_len, data=dat2, family=binomial)       # 集計データに対して二項分布回帰を適用
+
+logLik(res2); logLik(res3)        # 尤度の比較．回帰係数などの推定結果は同じだが，組み合わせの項の有無により尤度は違ってくるので注意が必要
+
+## 3 - 7 ポアソン回帰
+
+library(pscl)        # psclパッケージを読み込み
+data(prussian)         # psclの中のprussianというデータを読み込み（データの詳細は?prussianで確認）
+dat <- prussian         # prussianをdatにコピー
+lambda_hat <- mean(dat$y)        # 死亡者数yの平均値
+obs_prob <- prop.table(table(dat$y))       # 死亡者数yの出現割合を計算
+pred_prob <- dpois(as.numeric(names(obs_prob)), lambda=lambda_hat)      # ポアソン分布を仮定したときの死亡者数の期待割合
+compared_prob <- cbind(obs_prob,pred_prob)      # 観測とポアソン分布を仮定した予測値を並べる
+colnames(compared_prob) <- c("Observed","Predicted")       # 列名を指定
+barplot(compared_prob , col=rep(c("gray","blue"),each=5), beside=TRUE)      # 2つのヒストグラムを並べて描画
+
+res <- glm(y~year, data=dat, family="poisson")      # 年に対する死亡者数をポアソン回帰する
+plot(y~year, data=dat)       # データをプロット
+x_seq <- unique(dat$year)        # 予測値をプロットするためのx軸の設定
+lines(x_seq, predict(res, newdata=list(year=x_seq), type="response"), col="blue")       # ポアソン回帰による予測値を上描き（これだと当てはまりが良いのか悪いのか判断が難しいという例）
+
+mean_y <- tapply(dat$y, dat$year, mean)        # 年ごとの死亡者数の平均値の表を作成
+plot(mean_y~unique(dat$year), xlab="Year", ylab="Mean horsekicked")      # 年に対して平均値をプロット
+lines(x_seq, predict(res, newdata=list(year=x_seq), type="response"), col="blue")       # ポアソン回帰による予測値を上描き（こちらのほうが当てはまりの様子を理解しやすい）
+
+Res <- lapply(1:9, function(k) glm(y~poly(year,degree=k,raw=TRUE), data=dat, family=poisson))       # ポアソン多項式回帰
+round(sapply(1:9, function(k) AIC(Res[[k]])), 2)       # AICを計算
+plot(mean_y~unique(dat$year), xlab="Year", ylab="Mean horsekicked")      # 年に対して平均値をプロット
+lines(x_seq, predict(Res[[4]], newdata=list(year=x_seq), type="response"), col="blue")       # AIC最小のモデルの結果を上描き
