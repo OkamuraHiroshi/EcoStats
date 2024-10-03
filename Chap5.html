@@ -1,10 +1,4 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-</head>
- 
-<body>
+### 5章  非線形回帰モデル
 
 ## 5 - 1  非線形回帰
 
@@ -151,6 +145,3 @@ pred_svm <- predict(res_svm,as.matrix(dat_test[,2:3]))       # サポートベ�
 roc_svm <- roc(dat_test$Sex, as.numeric(pred_svm))         # サポートベクターマシンのROCアウトプット
 
 ggroc(list(NN=roc_nn,SVM=roc_svm),legacy.axes=TRUE)+xlab("FPR")+ylab("TPR")+ggtitle(paste("AUC =",round(roc_nn$auc,2)," ",round(roc_svm$auc,2)))+geom_segment(aes(x=0, xend=1, y=0, yend=1), color="blue", linetype="dashed")+theme_bw()       # ニューラルネットとサポートベクターマシンのROC曲線とAUC
-
-</body>
-</html>
