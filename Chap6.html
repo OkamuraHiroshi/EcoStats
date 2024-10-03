@@ -263,14 +263,14 @@ cowplot::plot_grid(pp1, pp2)       # 2つの図を並べて表示
 library(TropFishR)      # TropFishRパッケージを読み込み
 data(whiting)        # whitingデータを読み込み
 dat <- whiting         # whitingデータをdatにコピー
-vpa <- function(p, dat, replace_zero_catch=0.1){
-  F_AT <- exp(p)
+vpa <- function(p, dat, replace_zero_catch=0.1){        # VPAによって年齢別個体数・漁獲係数を計算するプログラム
+  F_AT <- exp(p)        # 最高齢A最終年Tの漁獲係数（推定パラメータ）
   
-  caa <- as.matrix(dat$catch)
-  caa[caa==0] <- replace_zero_catch
-  M <- dat$M
-  nr <- nrow(caa)
-  nc <- ncol(caa)
+  caa <- as.matrix(dat$catch)       # 漁獲尾数を行列データに変換
+  caa[caa==0] <- replace_zero_catch        # 漁獲尾数が0となっているものを予め設定した小さな正数で置き換える
+  M <- dat$M         # 自然死亡係数
+  nr <- nrow(caa)       # 年齢別漁獲尾数の行数（年齢クラスの数）
+  nc <- ncol(caa)       # 年齢別漁獲尾数の列数（年数）
   
   naa <- faa <- matrix(NA, nr, nc)
   
