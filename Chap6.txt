@@ -292,7 +292,7 @@ vpa <- function(p, dat, replace_zero_catch=0.1){        # VPAによって年齢�
     naa <- res$naa       # naaを更新
   }
   for (j in 1:(nc-1)){
-    Fr <- faa[nr-1, nc-j]       # 最高齢の漁獲係数は最高齢-1歳の漁獲係数と等しいという仮定
+    Fr <- faa[nr-1, nc-j]       # 最高齢の漁獲係数は最高齢-1歳の漁獲係数と等しいという仮定（最終年の前年から実行）
     res <- cohort_analysis(Fr, nr, nc-j)        # 上記仮定に基づいてコホート解析を実行（左下側の空白が埋まる）
     faa <- res$faa       # faaを更新
     naa <- res$naa       # naaを更新
@@ -303,24 +303,24 @@ vpa <- function(p, dat, replace_zero_catch=0.1){        # VPAによって年齢�
 
 nr <- nrow(dat$catch)      # 年齢別漁獲尾数の行数（年齢カテゴリ数に対応）
 nc <- ncol(dat$catch)      # 年齢別漁獲尾数の列数（年数に対応）
-f_vpa <- function(p) {
-  res <- vpa(p, dat)
-  res$faa[nr, nc]/res$faa[nr-1,nc]-1
+f_vpa <- function(p) {        # VPAの目的関数
+  res <- vpa(p, dat)       # vpaの実行
+  res$faa[nr, nc]/res$faa[nr-1,nc]-1       # 最終年最高齢の漁獲係数と最終年/最高齢-1歳の漁獲係数が等しいとする仮定（上のvpa関数の中ではその仮定は使用されていないことに注意）
 }
-log_F_AT <- uniroot(f_vpa,c(0.01,3))$root
-( F_AT_est <- exp(log_F_AT) )
+log_F_AT <- uniroot(f_vpa,c(0.01,3))$root       # 最終年/最高齢-1歳の漁獲係数と等しくなる最終年最高齢の漁獲係数F_ATの対数値を探索
+( F_AT_est <- exp(log_F_AT) )       # 推定された最終年/最高齢の漁獲係数を表示
 
 library(tidyverse)       # tidyverseパッケージを読み込み
-res <- vpa(log_F_AT, dat)
-colnames(res$naa) <- substr(colnames(dat$catch),2,5)
-dat1 <- res$naa %>% as.data.frame() %>% tibble::rownames_to_column("age") %>% pivot_longer(!age, names_to = "year", values_to = "value") %>% mutate_at(vars(year), as.factor)
-dat1$age <- as.numeric(dat1$age)-1
-dat1 <- dat1 %>% mutate_at(vars(age), factor, levels=7:0)
-range <- seq(0,100,len=5)
-range <- range[1:(length(range)-1)]
-ggplot(dat1,aes(x=year, y=age)) + geom_point(aes(size=value, fill=age, color=age), alpha = 0.75, shape = 21) + coord_fixed(ratio=2) + scale_size_continuous(limits = c(0.0001, 1.0001)*max(dat1$value,na.rm=TRUE), range = c(1,10), breaks = round(range*max(dat1$value,na.rm=TRUE)/100,digits=0))+theme_bw() + theme(axis.text.x = element_text(angle = 90, hjust = 1), panel.background = element_blank(), panel.border = element_rect(colour = "black", fill = NA, size = 1.2)) + labs(x="Year", y="Age", size="Population Size") + guides(color="none", fill="none")
+res <- vpa(log_F_AT, dat)         # 推定された最終年/最高齢の漁獲係数の対数値を入れてvpaを再実行
+colnames(res$naa) <- substr(colnames(dat$catch),2,5)      # 年のラベルを個体数推定値に付与
+dat1 <- res$naa %>% as.data.frame() %>% tibble::rownames_to_column("age") %>% pivot_longer(!age, names_to = "year", values_to = "value") %>% mutate_at(vars(year), as.factor)       # 年齢別個体数の行列を年齢，年，個体数の列を持つ縦長データに変換（後の図描画のため）
+dat1$age <- as.numeric(dat1$age)-1        # 年齢のラベルが1歳からになっているのを0歳からに変更
+dat1 <- dat1 %>% mutate_at(vars(age), factor, levels=7:0)       # 年齢の変数をカテゴリーに変更
+range <- seq(0,100,len=5)          # bubble plotを描くための円の大きさに関する設定
+range <- range[1:(length(range)-1)]          # 円の大きさに関する設定
+ggplot(dat1,aes(x=year, y=age)) + geom_point(aes(size=value, fill=age, color=age), alpha = 0.75, shape = 21) + coord_fixed(ratio=2) + scale_size_continuous(limits = c(0.0001, 1.0001)*max(dat1$value,na.rm=TRUE), range = c(1,10), breaks = round(range*max(dat1$value,na.rm=TRUE)/100,digits=0))+theme_bw() + theme(axis.text.x = element_text(angle = 90, hjust = 1), panel.background = element_blank(), panel.border = element_rect(colour = "black", fill = NA, size = 1.2)) + labs(x="Year", y="Age", size="Population Size") + guides(color="none", fill="none")       # bubble plotを描画
 
-vpa2 <- function(p, dat, replace_zero_catch=0.1){
+vpa2 <- function(p, dat, replace_zero_catch=0.1){       # 上のvpa関数とほぼ同じだが，最終年の年齢別漁獲係数がパラメータになっている
   F_T <- exp(p)
   F_AT <- last(F_T)
   
@@ -365,7 +365,7 @@ vpa2 <- function(p, dat, replace_zero_catch=0.1){
   return(list(faa=faa, naa=naa))
 }
 
-set.seed(1)
+set.seed(1)       # 乱数のseedを設定
 cpue <- matrix(log(seq(100,5,len=nc))+rnorm(nc*(nr-1),0,0.4), nrow=nr-1, ncol=nc, byrow=TRUE)
 dat$log_cpue <- cpue
 f_vpa2 <- function(p) {
