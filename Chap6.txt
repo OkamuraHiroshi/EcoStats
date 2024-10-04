@@ -266,43 +266,43 @@ vpa <- function(p, dat, replace_zero_catch=0.1){        # VPAによって年齢�
   nr <- nrow(caa)       # 年齢別漁獲尾数の行数（年齢クラスの数）
   nc <- ncol(caa)       # 年齢別漁獲尾数の列数（年数）
   
-  naa <- faa <- matrix(NA, nr, nc)
+  naa <- faa <- matrix(NA, nr, nc)        # 年齢別個体数と年齢別漁獲係数の入れ物を用意
   
-  cohort_analysis <- function(fr,i,j){
-    faa[i, j] <- fr
-    naa[i, j] <- caa[i, j]*exp(M/2)*(1-exp(-faa[i, j]))
+  cohort_analysis <- function(fr,i,j){       # コホート解析（VPA）を実行する関数
+    faa[i, j] <- fr        # i歳j年の漁獲係数をインプット値に設定
+    naa[i, j] <- caa[i, j]*exp(M/2)*(1-exp(-faa[i, j]))         # 漁獲方程式によってi歳j年の個体数を計算
   
-    for (k in 1:i){
+    for (k in 1:i){         # 年齢と年を遡っていく（斜め左上方向に過去を遡っていく）
       if (i-k > 0 & j-k >0){
-        naa[i-k, j-k] <- (naa[i-(k-1), j-(k-1)]*exp(M/2)+caa[i-k, j-k])*exp(M/2)
-        faa[i-k, j-k] <- -log(1-caa[i-k, j-k]*exp(M/2)/naa[i-k, j-k])
+        naa[i-k, j-k] <- (naa[i-(k-1), j-(k-1)]*exp(M/2)+caa[i-k, j-k])*exp(M/2)       # 漁獲方程式によって1歳若い前年の個体数を計算（今年の個体数に漁獲死亡と自然死亡の分を戻せば前年の1歳若い個体数が計算できる）
+        faa[i-k, j-k] <- -log(1-caa[i-k, j-k]*exp(M/2)/naa[i-k, j-k])        # 個体数推定値から漁獲係数を推定
       }
     }
-    return(list(faa=faa, naa=naa))
+    return(list(faa=faa, naa=naa))       # 漁獲係数推定値と個体数推定値をアウトプット
   }
   
-  res <- cohort_analysis(F_AT, nr, nc)
-  faa <- res$faa
-  naa <- res$naa
+  res <- cohort_analysis(F_AT, nr, nc)     # 最終年最高齢のFを与えて，そこから芋づる式にコホートを遡って個体数と漁獲係数を計算
+  faa <- res$faa       # 計算された年齢別漁獲係数（まだ，ひとつのコホートしか計算されていない）
+  naa <- res$naa       # 計算された年齢別個体数（まだ，ひとつのコホートしか計算されていない）
   
   for (i in 1:(nr-1)){
-    Fr <- faa[nr-i, nc-1]
-    res <- cohort_analysis(Fr, nr-i, nc)
-    faa <- res$faa
-    naa <- res$naa
+    Fr <- faa[nr-i, nc-1]         # 最終年の漁獲係数は前年の同年齢の漁獲係数と等しいという仮定
+    res <- cohort_analysis(Fr, nr-i, nc)       # 上記に基づいてコホート解析を実行（右上側の空白が埋まる）
+    faa <- res$faa       # faaを更新
+    naa <- res$naa       # naaを更新
   }
   for (j in 1:(nc-1)){
-    Fr <- faa[nr-1, nc-j]
-    res <- cohort_analysis(Fr, nr, nc-j)
-    faa <- res$faa
-    naa <- res$naa  
+    Fr <- faa[nr-1, nc-j]       # 最高齢の漁獲係数は最高齢-1歳の漁獲係数と等しいという仮定
+    res <- cohort_analysis(Fr, nr, nc-j)        # 上記仮定に基づいてコホート解析を実行（左下側の空白が埋まる）
+    faa <- res$faa       # faaを更新
+    naa <- res$naa       # naaを更新
   }
     
-  return(list(faa=faa, naa=naa))
+  return(list(faa=faa, naa=naa))      # 最終的な年齢別漁獲係数（faa）と年齢別個体数（naa）をアウトプット
 }
 
-nr <- nrow(dat$catch)
-nc <- ncol(dat$catch)
+nr <- nrow(dat$catch)      # 年齢別漁獲尾数の行数（年齢カテゴリ数に対応）
+nc <- ncol(dat$catch)      # 年齢別漁獲尾数の列数（年数に対応）
 f_vpa <- function(p) {
   res <- vpa(p, dat)
   res$faa[nr, nc]/res$faa[nr-1,nc]-1
@@ -310,7 +310,7 @@ f_vpa <- function(p) {
 log_F_AT <- uniroot(f_vpa,c(0.01,3))$root
 ( F_AT_est <- exp(log_F_AT) )
 
-library(tidyverse)
+library(tidyverse)       # tidyverseパッケージを読み込み
 res <- vpa(log_F_AT, dat)
 colnames(res$naa) <- substr(colnames(dat$catch),2,5)
 dat1 <- res$naa %>% as.data.frame() %>% tibble::rownames_to_column("age") %>% pivot_longer(!age, names_to = "year", values_to = "value") %>% mutate_at(vars(year), as.factor)
