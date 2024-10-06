@@ -321,66 +321,66 @@ range <- range[1:(length(range)-1)]          # 円の大きさに関する設定
 ggplot(dat1,aes(x=year, y=age)) + geom_point(aes(size=value, fill=age, color=age), alpha = 0.75, shape = 21) + coord_fixed(ratio=2) + scale_size_continuous(limits = c(0.0001, 1.0001)*max(dat1$value,na.rm=TRUE), range = c(1,10), breaks = round(range*max(dat1$value,na.rm=TRUE)/100,digits=0))+theme_bw() + theme(axis.text.x = element_text(angle = 90, hjust = 1), panel.background = element_blank(), panel.border = element_rect(colour = "black", fill = NA, size = 1.2)) + labs(x="Year", y="Age", size="Population Size") + guides(color="none", fill="none")       # bubble plotを描画
 
 vpa2 <- function(p, dat, replace_zero_catch=0.1){       # 上のvpa関数とほぼ同じだが，最終年の年齢別漁獲係数がパラメータになっている
-  F_T <- exp(p)
-  F_AT <- last(F_T)
+  F_T <- exp(p)        # 最終年の年齢別漁獲係数（最高齢は除く）
+  F_AT <- last(F_T)       # 最終年・最高齢の漁獲係数は最終年・最高齢-1歳の漁獲係数と等しいという仮定
   
-  caa <- as.matrix(dat$catch)
-  caa[caa==0] <- replace_zero_catch
-  M <- dat$M
-  nr <- nrow(caa)
-  nc <- ncol(caa)
+  caa <- as.matrix(dat$catch)       # 漁獲尾数を行列データに変換
+  caa[caa==0] <- replace_zero_catch        # 漁獲尾数が0の要素を予め設定した小さな正数で置き換える
+  M <- dat$M         # 自然死亡係数
+  nr <- nrow(caa)       # 年齢クラス数
+  nc <- ncol(caa)       # 年数
   
-  naa <- faa <- matrix(NA, nr, nc)
+  naa <- faa <- matrix(NA, nr, nc)      # 年齢別個体数と年齢別漁獲尾数の入れ物
   
-  cohort_analysis <- function(fr,i,j){
-    faa[i, j] <- fr
-    naa[i, j] <- caa[i, j]*exp(M/2)*(1-exp(-faa[i, j]))
+  cohort_analysis <- function(fr,i,j){         # コホート解析の関数
+    faa[i, j] <- fr        # i歳j年の漁獲係数をインプット値に設定
+    naa[i, j] <- caa[i, j]*exp(M/2)*(1-exp(-faa[i, j]))         # 漁獲方程式によってi歳j年の個体数を計算
   
     for (k in 1:i){
       if (i-k > 0 & j-k >0){
-        naa[i-k, j-k] <- (naa[i-(k-1), j-(k-1)]*exp(M/2)+caa[i-k, j-k])*exp(M/2)
-        faa[i-k, j-k] <- -log(1-caa[i-k, j-k]*exp(M/2)/naa[i-k, j-k])
+        naa[i-k, j-k] <- (naa[i-(k-1), j-(k-1)]*exp(M/2)+caa[i-k, j-k])*exp(M/2)       # 漁獲方程式によって1歳若い前年の個体数を計算
+        faa[i-k, j-k] <- -log(1-caa[i-k, j-k]*exp(M/2)/naa[i-k, j-k])        # 個体数推定値から漁獲係数を計算
       }
     }
-    return(list(faa=faa, naa=naa))
+    return(list(faa=faa, naa=naa))       # 結果をアウトプット
   }
   
-  res <- cohort_analysis(F_AT, nr, nc)
-  faa <- res$faa
-  naa <- res$naa
+  res <- cohort_analysis(F_AT, nr, nc)     # 最終年最高齢のFを与えて，コホートを遡って個体数と漁獲係数を計算
+  faa <- res$faa       # 年齢別漁獲係数を更新
+  naa <- res$naa       # 年齢別個体数推定値を更新
   
   for (i in 1:(nr-1)){
-    Fr <- F_T[nr-i]
-    res <- cohort_analysis(Fr, nr-i, nc)
-    faa <- res$faa
-    naa <- res$naa
+    Fr <- F_T[nr-i]         # 最終年の年齢別漁獲係数を順に設定
+    res <- cohort_analysis(Fr, nr-i, nc)        # コホート解析を実行
+    faa <- res$faa       # 年齢別漁獲係数を更新
+    naa <- res$naa       # 年齢別個体数推定値を更新
   }
   for (j in 1:(nc-1)){
-    Fr <- faa[nr-1, nc-j]
-    res <- cohort_analysis(Fr, nr, nc-j)
-    faa <- res$faa
-    naa <- res$naa  
+    Fr <- faa[nr-1, nc-j]       # 最高齢の漁獲係数は最高齢-1歳の漁獲係数と等しいという仮定
+    res <- cohort_analysis(Fr, nr, nc-j)        # コホート解析を実行
+    faa <- res$faa       # 年齢別漁獲係数を更新
+    naa <- res$naa       # 年齢別個体数推定値を更新
   }
     
-  return(list(faa=faa, naa=naa))
+  return(list(faa=faa, naa=naa))    　  # 最終的な結果をアウトプット
 }
 
 set.seed(1)       # 乱数のseedを設定
-cpue <- matrix(log(seq(100,5,len=nc))+rnorm(nc*(nr-1),0,0.4), nrow=nr-1, ncol=nc, byrow=TRUE)
-dat$log_cpue <- cpue
-f_vpa2 <- function(p) {
-  res2 <- vpa2(p, dat)
-  log_cpue <- dat$log_cpue
-  log_q <- sapply(1:(nr-1), function(i) mean(log_cpue[i,] - log(res2$naa[i,])))
-  log_q <- matrix(rep(log_q,each=nc),nr-1,nc,byrow=TRUE)
-  sum((log_cpue-log_q-log(res2$naa[1:(nr-1),]))^2)
+cpue <- matrix(log(seq(100,5,len=nc))+rnorm(nc*(nr-1),0,0.4), nrow=nr-1, ncol=nc, byrow=TRUE)      # 年齢別cpue（の対数値）のシミュレーションデータを作成
+dat$log_cpue <- cpue          # cpueのデータをデータdatに付与
+f_vpa2 <- function(p) {         # 最適化の関数
+  res2 <- vpa2(p, dat)         # 年齢別漁獲係数を推定するVPA
+  log_cpue <- dat$log_cpue         # log(cpue)のデータを抽出
+  log_q <- sapply(1:(nr-1), function(i) mean(log_cpue[i,] - log(res2$naa[i,])))       # 漁獲効率の最尤推定値を計算
+  log_q <- matrix(rep(log_q,each=nc),nr-1,nc,byrow=TRUE)        # 漁獲効率を行列化する
+  sum((log_cpue-log_q-log(res2$naa[1:(nr-1),]))^2)          # 最適化の目的関数 log(cpue_{a,y}) ~ log(q_a) + log(n_{a,y})
 }
-log_F_T <- nlm(f_vpa2,log(rep(1,7)))$estimate
-F_T_est <- exp(log_F_T) 
-res2 <- vpa2(log_F_T,dat)
-N1 <- colSums(res$naa)
-N2 <- colSums(res2$naa)
-N1 <- N1/N1[1]
-N2 <- N2/N2[1]
-dat_for_plot <- data.frame(Year=as.numeric(rep(colnames(res$naa),2)),Type=factor(rep(c("No tuned","Tuned"),each=nc)),PopSize=c(N1,N2))
-ggplot(dat_for_plot, aes(x=Year,y=PopSize,color=Type))+geom_line()+labs(y="Relative Population Size")+geom_hline(yintercept=0.05,linetype="dashed")+theme_bw()
+log_F_T <- nlm(f_vpa2,log(rep(1,7)))$estimate        # 最適化によって得られた最終年の年齢別漁獲係数の対数値
+F_T_est <- exp(log_F_T)        # 最終年年齢別漁獲係数
+res2 <- vpa2(log_F_T,dat)         # 推定された漁獲係数を代入して全年・全年齢の個体数推定値・漁獲係数を計算
+N1 <- colSums(res$naa)         # 漁獲尾数のみを使ったVPAによる総個体数推定値
+N2 <- colSums(res2$naa)         # CPUEによってチューニングしたVPAによる総個体数推定値
+N1 <- N1/N1[1]        # 個体数を比較するために相対値化
+N2 <- N2/N2[1]        # 個体数を比較するために相対値化
+dat_for_plot <- data.frame(Year=as.numeric(rep(colnames(res$naa),2)),Type=factor(rep(c("No tuned","Tuned"),each=nc)),PopSize=c(N1,N2))        # 図を描くためのデータの作成
+ggplot(dat_for_plot, aes(x=Year,y=PopSize,color=Type))+geom_line()+labs(y="Relative Population Size")+geom_hline(yintercept=0.05,linetype="dashed")+theme_bw()        # 2つの方法による年ごとの個体数推定値の比較
