@@ -10,15 +10,15 @@ tapply(dat1$Pop, dat1$Location, function(x) sum(!is.na(x)))       # 生息場所
 
 dat_kk <- subset(dat1, Location=="Kalmykia, Kazakhstan")      # カルムイク/カザフスタンのサイガ個体群データを抽出
 
-year <- dat_kk$Year[which(!is.na(dat_kk$Pop))]
-dat_kk$T <- dat_kk$Year - (min(year)-1)
-dat_kk <- dat_kk %>% mutate(Y=log(Pop)/sqrt(T), X1=sqrt(T), X2=1/sqrt(T))
-mod <- lm(Y ~ X1 + X2 - 1, data=dat_kk)
-( parms <- c(r = as.numeric(exp(mod$coef[1])), N0 = as.numeric(exp(mod$coef[2]))) )
+year <- dat_kk$Year[which(!is.na(dat_kk$Pop))]       # データがある年だけを抽出
+dat_kk$T <- dat_kk$Year - (min(year)-1)         # 年ラベルを数字に置換（データがある最初の年を1とする）
+dat_kk <- dat_kk %>% mutate(Y=log(Pop)/sqrt(T), X1=sqrt(T), X2=1/sqrt(T))        # 線形回帰のためにデータを整形
+mod <- lm(Y ~ X1 + X2 - 1, data=dat_kk)       # 線形回帰を実行
+( parms <- c(r = as.numeric(exp(mod$coef[1])), N0 = as.numeric(exp(mod$coef[2]))) )      # 回帰係数から増加率と初期個体数を計算
 
-r <- parms["r"]
-N0 <- parms["N0"]
-dat_kk$Pred <- exp((log(r)*dat_kk$X1+log(N0)*dat_kk$X2)*dat_kk$X1)
+r <- parms["r"]       # 増加率
+N0 <- parms["N0"]       # 初期個体数
+dat_kk$Pred <- exp((log(r)*dat_kk$X1+log(N0)*dat_kk$X2)*dat_kk$X1)        # モデルによる予測個体数を計算
 
 ggplot(dat_kk, aes(x=Year, y=Pop))+geom_point()+geom_line(aes(x=Year, y=Pred), color="blue", linetype="dashed")+labs(y="Population Size", title=dat_kk$Location[1])+theme_bw()
 
