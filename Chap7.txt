@@ -20,17 +20,25 @@ r <- parms["r"]       # 増加率
 N0 <- parms["N0"]       # 初期個体数
 dat_kk$Pred <- exp((log(r)*dat_kk$X1+log(N0)*dat_kk$X2)*dat_kk$X1)        # モデルによる予測個体数を計算
 
-ggplot(dat_kk, aes(x=Year, y=Pop))+geom_point()+geom_line(aes(x=Year, y=Pred), color="blue", linetype="dashed")+labs(y="Population Size", title=dat_kk$Location[1])+theme_bw()
+ggplot(dat_kk, aes(x=Year, y=Pop))+geom_point()+geom_line(aes(x=Year, y=Pred), color="blue", linetype="dashed")+labs(y="Population Size", title=dat_kk$Location[1])+theme_bw()       # 個体数の観測値と回帰モデルによる予測値を比較するプロット
 
-dat_uk <- subset(dat1, Location=="Ustiurt, Kazakhstan")
-year <- dat_uk$Year[which(!is.na(dat_uk$Pop))]
-dat_uk$T <- dat_uk$Year - (min(year)-1)
-dat_uk <- dat_uk %>% mutate(Y=log(Pop)/sqrt(T), X1=sqrt(T), X2=1/sqrt(T))
-mod_uk <- lm(Y ~ X1 + X2 - 1, data=dat_uk)
-r_uk <- exp(mod_uk$coef[1]) 
-N0_uk <- exp(mod_uk$coef[2])
-dat_uk$Pred <- exp((log(r_uk)*dat_uk$X1+log(N0_uk)*dat_uk$X2)*dat_uk$X1)
-ggplot(dat_uk, aes(x=Year, y=Pop))+geom_point()+geom_line(aes(x=Year, y=Pred), color="blue", linetype="dashed")+labs(y="Population Size", title=dat_uk$Location[1])+theme_bw() 
+dat_uk <- subset(dat1, Location=="Ustiurt, Kazakhstan")       # ウスチュルト高原/カザフスタンのサイガ個体群データ
+year <- dat_uk$Year[which(!is.na(dat_uk$Pop))]        # データがある年だけを抽出
+dat_uk$T <- dat_uk$Year - (min(year)-1)          # データがある最初の年を1にする変換
+dat_uk <- dat_uk %>% mutate(Y=log(Pop)/sqrt(T), X1=sqrt(T), X2=1/sqrt(T))       # 回帰のためのデータの整形
+mod_uk <- lm(Y ~ X1 + X2 - 1, data=dat_uk)        # 線形回帰を適用
+r_uk <- exp(mod_uk$coef[1])        # 増加率
+N0_uk <- exp(mod_uk$coef[2])        # 初期個体数
+dat_uk$Pred <- exp((log(r_uk)*dat_uk$X1+log(N0_uk)*dat_uk$X2)*dat_uk$X1)        # 予測値を計算
+ggplot(dat_uk, aes(x=Year, y=Pop))+geom_point()+geom_line(aes(x=Year, y=Pred), color="blue", linetype="dashed")+labs(y="Population Size", title=dat_uk$Location[1])+theme_bw()        # 個体数の観測値と予測値をプロット
 
 ## 7 - 2 個体数の将来予測と絶滅確率の推定
 
+var_saiga <- function(T) t(c(T, 1))%*%vcov(mod)%*%c(T, 1)+T*summary(mod)$sigma^2
+future_saiga <- function(T,N=1){
+  pnorm(log(N), log(r)*T+log(N0), sqrt(var_saiga(T)))
+}
+T_obs <- last(dat_kk$T[!is.na(dat_kk$Pop)])
+Prob_extinction <- sapply(c(16,26,100),function(t) future_saiga(t+T_obs,N=1))
+names(Prob_extinction) <- paste0("Time = ",c(16,26,100))
+Prob_extinction
