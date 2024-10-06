@@ -1,0 +1,36 @@
+### 第7章　個体群動態評価のための統計モデル
+
+## 7 - 1 線形モデルを利用した個体群の評価
+
+library(tidyverse)       # tidyverseパッケージの読み込み
+saiga <- read_csv("Saiga_antelope.csv")        # サイガ個体群データの読み込み
+
+dat1 <- saiga %>% mutate_at(-(1:28), as.numeric) %>% pivot_longer(cols=starts_with("X"), names_prefix="X", names_to="Year",values_to="Pop") %>% mutate_at(vars(Year), as.numeric) %>% mutate_at(vars(Location), as.factor)        # サイガ個体群データを分析しやすいように整形
+tapply(dat1$Pop, dat1$Location, function(x) sum(!is.na(x)))       # 生息場所ごとに個体数カウントがいくつあるかを表示
+
+dat_kk <- subset(dat1, Location=="Kalmykia, Kazakhstan")      # カルムイク/カザフスタンのサイガ個体群データを抽出
+
+year <- dat_kk$Year[which(!is.na(dat_kk$Pop))]
+dat_kk$T <- dat_kk$Year - (min(year)-1)
+dat_kk <- dat_kk %>% mutate(Y=log(Pop)/sqrt(T), X1=sqrt(T), X2=1/sqrt(T))
+mod <- lm(Y ~ X1 + X2 - 1, data=dat_kk)
+( parms <- c(r = as.numeric(exp(mod$coef[1])), N0 = as.numeric(exp(mod$coef[2]))) )
+
+r <- parms["r"]
+N0 <- parms["N0"]
+dat_kk$Pred <- exp((log(r)*dat_kk$X1+log(N0)*dat_kk$X2)*dat_kk$X1)
+
+ggplot(dat_kk, aes(x=Year, y=Pop))+geom_point()+geom_line(aes(x=Year, y=Pred), color="blue", linetype="dashed")+labs(y="Population Size", title=dat_kk$Location[1])+theme_bw()
+
+dat_uk <- subset(dat1, Location=="Ustiurt, Kazakhstan")
+year <- dat_uk$Year[which(!is.na(dat_uk$Pop))]
+dat_uk$T <- dat_uk$Year - (min(year)-1)
+dat_uk <- dat_uk %>% mutate(Y=log(Pop)/sqrt(T), X1=sqrt(T), X2=1/sqrt(T))
+mod_uk <- lm(Y ~ X1 + X2 - 1, data=dat_uk)
+r_uk <- exp(mod_uk$coef[1]) 
+N0_uk <- exp(mod_uk$coef[2])
+dat_uk$Pred <- exp((log(r_uk)*dat_uk$X1+log(N0_uk)*dat_uk$X2)*dat_uk$X1)
+ggplot(dat_uk, aes(x=Year, y=Pop))+geom_point()+geom_line(aes(x=Year, y=Pred), color="blue", linetype="dashed")+labs(y="Population Size", title=dat_uk$Location[1])+theme_bw() 
+
+## 7 - 2 個体数の将来予測と絶滅確率の推定
+
