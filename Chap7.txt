@@ -43,11 +43,310 @@ Prob_extinction <- sapply(c(16,26,100),function(t) future_saiga(t+T_obs,N=1))   
 names(Prob_extinction) <- paste0("Time = ",c(16,26,100))       # 絶滅確率の結果の名前を設定
 Prob_extinction        # 絶滅確率計算結果を表示
 
-P_ext <- NULL
-for (N in c(1,50,500,5000)){
-  Prob_extinction <- sapply(c(16,26,100),function(t) future_saiga(t+T_obs,N=N))
-  P_ext <- rbind(P_ext, Prob_extinction)
+P_ext <- NULL      # 閾値を変えたときの絶滅確率を記録する入れ物
+for (N in c(1,50,500,5000)){        # 閾値の変化
+  Prob_extinction <- sapply(c(16,26,100),function(t) future_saiga(t+T_obs,N=N))      # 16，26，100年後の絶滅確率
+  P_ext <- rbind(P_ext, Prob_extinction)       # 閾値を変えたものを積み重ねていく
 }
-colnames(P_ext) <- paste0("Time = ",c(16,26,100))
-rownames(P_ext) <- paste0("N* = ",c(1,50,500,5000))
-P_ext
+colnames(P_ext) <- paste0("Time = ",c(16,26,100))       # 列は将来予測の年数
+rownames(P_ext) <- paste0("N* = ",c(1,50,500,5000))       # 行は閾値の違い
+P_ext       # 絶滅確率表の表示
+
+Future_mean_Pop <- exp(log(r)*(T_obs+1:100)+log(N0))       # 過去と将来の平均個体数
+Future_lo_Pop <- sapply(1:100, function(i) exp(log(r)*(T_obs+i)+log(N0)-qnorm(0.975)*sqrt(var_saiga(T_obs+i))))        # 個体数推定値の2.5%下限
+Future_up_Pop <- sapply(1:100, function(i) exp(log(r)*(T_obs+i)+log(N0)+qnorm(0.975)*sqrt(var_saiga(T_obs+i))))        # 個体数推定値の97.5%上限
+
+Future_proj <- data.frame(Year=dat_kk$Year[dat_kk$T==T_obs]+1:100, Mean=Future_mean_Pop, Lo=Future_lo_Pop, Up=Future_up_Pop)        # 将来予測結果を表示するためのデータセット
+
+ggplot(Future_proj, aes(x=Year, y=Mean))+geom_ribbon(aes(ymin=Lo, ymax=Up),alpha=0.2) + labs(y="Population Size") + geom_hline(yintercept=5000,linetype="dashed")+geom_line(color="blue",linewidth=1.2)+theme_bw()      # 個体数の予測値の変化（95%信頼区間付き）．赤点線はN=5000．
+
+## 7 - 3　非線形モデルと密度効果
+
+var_saiga2 <- function(T) t(c(T, 1))%*%vcov(mod_uk)%*%c(T, 1)+T*summary(mod_uk)$sigma^2
+future_saiga2 <- function(T,N=1){
+  pnorm(log(N), log(r_uk)*T+log(N0_uk), sqrt(var_saiga2(T)))
+}
+T_obs2 <- last(dat_uk$T[!is.na(dat_uk$Pop)])
+Prob_extinction2 <- sapply(c(16,26,100),function(t) future_saiga(t+T_obs2,N=1))
+names(Prob_extinction2) <- paste0("Time = ",c(16,26,100))
+Future_mean_Pop2 <- exp(log(r_uk)*(T_obs2+1:100)+log(N0_uk))
+Future_lo_Pop2 <- sapply(1:100, function(i) exp(log(r_uk)*(T_obs2+i)+log(N0_uk)-qnorm(0.975)*sqrt(var_saiga(T_obs2+i))))
+Future_up_Pop2 <- sapply(1:100, function(i) exp(log(r_uk)*(T_obs2+i)+log(N0_uk)+qnorm(0.975)*sqrt(var_saiga(T_obs2+i))))
+
+Future_proj2 <- data.frame(Year=dat_uk$Year[dat_uk$T==T_obs2]+1:100, Mean=Future_mean_Pop2, Lo=Future_lo_Pop2, Up=Future_up_Pop2)
+
+ggplot(Future_proj2, aes(x=Year, y=Mean))+geom_ribbon(aes(ymin=Lo, ymax=Up),alpha=0.2) + labs(y="Population Size") + geom_hline(yintercept=5000,linetype="dashed")+geom_line(color="blue",linewidth=1.5)+scale_y_log10()+theme_bw()
+
+paurelia <- c(17, 29, 39, 63, 185, 258, 267, 392, 510, 570, 650, 560, 575, 650, 550, 480, 520, 500)
+names(paurelia) <- 1:length(paurelia)-1
+plot(as.numeric(names(paurelia)), paurelia, pch=16, xlab="日", ylab="個体数")
+
+dat_p <- paurelia %>% as.data.frame %>% rename("N"=1) %>% rownames_to_column("Time")
+n <- nrow(dat_p)
+N2 <- dat_p$N[2:n]
+N1 <- dat_p$N[1:(n-1)]
+mod_l <- nls(N2~N1+r*N1*(1-N1/K), start=list(r=0.5, K=600))
+( params <- c(r=summary(mod_l)$coef[1,1], K=summary(mod_l)$coef[2,1]) )
+N <- seq(0,600,by=10)
+plot(N1, N2, xlab=expression(N[t]), ylab=expression(N[t+1]), pch=16)
+lines(N1, predict(mod_l), col="blue", lwd=2)
+
+## 7 - 4 最大持続生産量
+
+delury <- read.csv("DeLury.csv")
+delury <- delury %>% mutate(Cat=Catch/Mass, CR=CPUE/Mass)
+TC <- delury %>% group_by(Year) %>% summarize(TC=sum(Cat))
+del_res <- lapply(1987:2000, function(i) lm(CR~cumsum(Cat),data=subset(delury, Year==i)))
+lm_res <- sapply(1:length(del_res), function(i) c(-del_res[[i]]$coef[2], -del_res[[i]]$coef[1]/del_res[[i]]$coef[2]))
+lm_res <- rbind(lm_res, TC$TC)
+lm_res <- as.data.frame(t(lm_res))
+names(lm_res) <- c("q","N0","Catch")
+rownames(lm_res) <- 1987:2000
+
+obj <- function(p, dat, model="logistic", dd=10^(-6)){
+  r <- exp(p[1])
+  K <- exp(p[2])
+  
+  nT <- nrow(dat)
+  
+  N <- dat$N0
+  Cat <- dat$Catch
+  
+  like <- 0
+  for (i in 1:(nT-1)){
+    if (model=="logistic") like <- like + (log(N[i+1]) - log(max(N[i]+r*N[i]*(1-N[i]/K)-Cat[i],dd)))^2
+    if (model=="fox") like <- like + (log(N[i+1]) - log(max(N[i]+r*N[i]*(1-log(N[i])/log(K))-Cat[i],dd)))^2
+  }
+
+  like
+}
+
+dat <- lm_res
+p0 <- c(log(mean(dat$Catch/dat$N0)), log(max(dat$N0)))
+mod_log <- nlm(obj, p0, dat=dat, model="logistic")
+mod_fox <- nlm(obj, p0, dat=dat, model="fox")
+print(c(sse_log=mod_log$minimum, sse_fox=mod_fox$minimum), 3)
+
+parms <- exp(mod_fox$estimate)
+names(parms) <- c("r", "K")
+par_msy <- c(Fmsy=as.numeric(parms["r"]/log(parms["K"])), Nmsy=as.numeric(parms["K"]/exp(1)), MSY=as.numeric(parms["r"]*parms["K"]/(exp(1)*log(parms["K"])))) 
+print(par_msy, 2) 
+
+rel_N <- dat$N0/par_msy["Nmsy"]
+rel_F <- (dat$Catch/dat$N0)/par_msy["Fmsy"]
+out_fox <- data.frame(Y=as.numeric(rownames(dat)), N=rel_N, U=rel_F)  
+min_Y <- min(out_fox$Y)
+max_Y <- max(out_fox$Y)
+ggplot(out_fox, aes(x = N, y = U)) + theme_bw() +
+  geom_rect(xmin = 1, xmax = 2, ymin = 0, ymax = 1, fill = 'green', alpha = 0.05) +
+  geom_rect(xmin = 0, xmax = 1, ymin = 1, ymax = 2, fill = 'red', alpha = 0.05) +
+  geom_rect(xmin = 0, xmax = 1, ymin = 0, ymax = 1, fill = 'yellow', alpha = 0.05) + 
+  geom_rect(xmin = 1, xmax = 2, ymin = 1, ymax = 2, fill = 'orange', alpha = 0.05) + 
+  geom_path(linetype = 2, linewidth = 0.4) +
+  geom_point(aes(size=Y, fill=Y), shape = 21) +
+  scale_fill_continuous(limits=c(min_Y,max_Y),breaks=seq(min_Y,max_Y,by=1)) + 
+  scale_size_continuous(limits=c(min_Y,max_Y),breaks=seq(min_Y,max_Y,by=1)) +
+  labs(y="Fishing Rate", x="Population Size", fill="Year", size="Year") +
+  guides(fill= guide_legend(), size=guide_legend()) +
+  scale_y_continuous(limits=c(0,2)) + scale_x_continuous(limits=c(0,2))
+
+N0 <- lm_res$N0
+Cat <- lm_res$Catch
+r <- parms["r"]
+K <- parms["K"]
+N1_pred <- N0+r*N0*(1-log(N0)/log(K))-Cat
+dat_fox <- data.frame(Obs=log(N0[-1]), Pred=log(N1_pred[-length(N0)]))
+ggplot(dat_fox, aes(x=Obs, y=Pred))+geom_point()+geom_abline(intercept=0, slope=1, linetype="dashed")+xlim(5,7.5)+ylim(5,7.5)+theme_bw()
+
+## 7 - 5 状態空間モデル
+
+dat1 <- lm_res %>% rownames_to_column("Year") %>% mutate_at(vars(Year), as.numeric)
+p1 <- ggplot(dat1, aes(x=Year, y=N0)) + geom_point() + geom_line() + ylim(0, 1600) + theme_bw()
+p2 <- ggplot(dat1, aes(x=Year, y=q)) + geom_point() + geom_line() + theme_bw()
+cowplot::plot_grid(p1, p2)
+
+sink("delury_ss.cpp")
+cat("
+
+// State-Space Delury Model
+
+#include <TMB.hpp>
+#include <iostream>
+
+template<class Type>
+Type objective_function<Type>::operator() ()
+{
+  // DATA //
+  DATA_VECTOR(CPUE);
+  DATA_VECTOR(CAT);
+  DATA_IVECTOR(YEAR);
+  DATA_IVECTOR(START);
+  DATA_IVECTOR(END);
+  DATA_INTEGER(Y);
+  
+  // PARAMETER //
+  PARAMETER(log_r);
+  PARAMETER(logit_b);
+  PARAMETER(tilde_n0);
+  PARAMETER(log_tilde_q);
+  PARAMETER(log_sigma);
+  PARAMETER(log_tau);
+  PARAMETER(log_eta);
+  PARAMETER_VECTOR(log_q);  
+  PARAMETER_VECTOR(n0);
+  
+  // PARAMETER TRANSFORMATION //
+  Type r = exp(log_r);
+  Type b = Type(1.0)/(Type(1.0)+exp(-logit_b));
+  Type sigma = exp(log_sigma);
+  Type tau = exp(log_tau);
+  Type eta = exp(log_eta);
+  int T = CPUE.size();
+  
+  vector<Type> q(Y);
+  vector<Type> n_last(Y);
+  vector<Type> N_S(Y);
+  vector<Type> N_E(Y);
+  vector<Type> U(T);
+  vector<Type> n(T);
+  vector<Type> N(T);
+  vector<Type> pred_n(T);
+     
+  Type nll = 0.0;
+      
+  // DeLury Model
+  
+  for (int i=0;i<T;i++){
+    if (START(i)==1) {
+      if (i==0) nll += -dnorm(log_q(YEAR(i)),log_tilde_q,eta,true); 
+      if (i > 0) nll += -dnorm(log_q(YEAR(i)),log_q(YEAR(i)-1),eta,true);
+      n(i) = n0(YEAR(i));
+      N(i) = exp(n(i));
+      N_S(YEAR(i)) = N(i);
+      U(i) = CAT(i)/N(i);
+    }
+    if (START(i)==0) {
+      n(i) = n(i-1)+log(Type(1.0)-U(i-1));
+      N(i) = exp(n(i));
+      U(i) = CAT(i)/N(i);
+    }
+    U(i) = CppAD::CondExpLe(Type(1.0)-U(i),Type(0.0),Type(0.9999),U(i));
+    if (END(i)==1){
+      n_last(YEAR(i)) = n(i)+log(Type(1.0)-U(i));
+      N_E(YEAR(i)) = exp(n_last(YEAR(i)));
+    }
+
+    pred_n(i) = log_q(YEAR(i))+n(i);
+    nll += -dnorm(log(CPUE(i)),pred_n(i),tau,true);
+  }
+  
+  // Density-Dependent Model
+  
+  nll += -dnorm(n0(0),tilde_n0,sigma/b,true);
+  for (int i=1;i<Y;i++){
+    nll += -dnorm(n0(i),log_r+(Type(1.0)-b)*n_last(i-1),sigma,true);
+  }
+  
+  q = exp(log_q);
+  Type Umsy = b;
+  Type N_eq = exp((log_r+(Type(1.0)-b)*log(Type(1.0)-b))/b);
+  Type MSY = Umsy*N_eq;
+  Type N0_new = exp(log_r+(Type(1.0)-b)*n_last(Y-1));
+  
+  // ADREPORTS
+  
+  ADREPORT(r);
+  ADREPORT(b);
+  ADREPORT(sigma);
+  ADREPORT(tau);
+  ADREPORT(eta);
+  ADREPORT(q);
+  ADREPORT(U);
+  ADREPORT(N_S);
+  ADREPORT(N_E);
+  ADREPORT(Umsy);
+  ADREPORT(N_eq);
+  ADREPORT(MSY);  
+  ADREPORT(pred_n);
+  ADREPORT(N);
+  ADREPORT(N0_new);
+    
+  return nll;
+}
+", fill=TRUE)
+sink()
+
+library(TMB)
+compile("delury_ss.cpp")
+dyn.load(dynlib("delury_ss"))
+
+delury1 <- delury %>% mutate(Y=Year-min(Year)) %>%
+group_by(Year) %>% mutate(W=Week-min(Week), START=(W==0), END=(W==max(W)))
+nY <- max(delury1$Y)+1
+dat_ss <- list(CPUE=delury1$CR, CAT=delury1$Cat, YEAR=delury1$Y, START=as.numeric(delury1$START), END=as.numeric(delury1$END), Y=nY)
+par_ss <- list(
+  log_r=log(6),
+  logit_b=0,
+  tilde_n0=mean(log(lm_res$N0)),
+  log_tilde_q=mean(log(lm_res$q)),
+  log_sigma=log(0.2),
+  log_tau=log(0.2),
+  log_eta=log(0.2),
+  log_q=log(lm_res$q),
+  n0=log(lm_res$N0)
+)
+obj <- MakeADFun(dat_ss, par_ss, random=c("log_q","n0"), DLL="delury_ss")
+mod_ss <- nlminb(obj$par, obj$fn, obj$gr)
+sdrep <- sdreport(obj)
+
+sum_res <- summary(sdrep)
+N0 <- sum_res[rownames(sum_res)=="N_S",]
+q <- sum_res[rownames(sum_res)=="q",]
+r <- sum_res[rownames(sum_res)=="r",]
+TC <- unlist((delury1 %>% group_by(Year) %>% summarize(TC=sum(Cat)))[,2])
+ss_res <- data.frame(q=q[,1], N0=N0[,1], U=TC/N0[,1])
+par_msy_ss <- cbind("Umsy"=sum_res[rownames(sum_res)=="b",],"Nmsy"=sum_res[rownames(sum_res)=="N_eq",],"MSY"=sum_res[rownames(sum_res)=="MSY",]) %>% as.data.frame()
+Year <- as.numeric(rownames(lm_res))
+rownames(ss_res) <- Year
+p1 <- ggplot(lm_res, aes(x=Year,y=N0))+geom_point()+geom_line(data=ss_res, aes(x=Year,y=N0),color="blue")+ylim(0, 1600)+theme_bw()
+p2 <- ggplot(lm_res, aes(x=Year,y=q))+geom_point()+geom_line(data=ss_res, aes(x=Year,y=q),color="blue")+theme_bw()
+cowplot::plot_grid(p1,p2)
+
+rel_N <- ss_res$N0/par_msy_ss["Nmsy"][1,]
+rel_U <- ss_res$U/par_msy_ss["Umsy"][1,]
+out_ss <- data.frame(Y=as.numeric(rownames(ss_res)), N=rel_N, U=rel_U)  
+min_Y <- min(out_ss$Y)
+max_Y <- max(out_ss$Y)
+ggplot(out_ss, aes(x = N, y = U)) + theme_bw() +
+  geom_rect(xmin = 1, xmax = 3, ymin = 0, ymax = 1, fill = 'green', alpha = 0.05) +
+  geom_rect(xmin = 0, xmax = 1, ymin = 1, ymax = 2, fill = 'red', alpha = 0.05) +
+  geom_rect(xmin = 0, xmax = 1, ymin = 0, ymax = 1, fill = 'yellow', alpha = 0.05) + 
+  geom_rect(xmin = 1, xmax = 3, ymin = 1, ymax = 2, fill = 'orange', alpha = 0.05) + 
+  geom_path(linetype = 2, linewidth = 0.4) +
+  geom_point(aes(size=Y, fill=Y), shape = 21) +
+  scale_fill_continuous(limits=c(min_Y,max_Y),breaks=seq(min_Y,max_Y,by=1)) + 
+  scale_size_continuous(limits=c(min_Y,max_Y),breaks=seq(min_Y,max_Y,by=1)) +
+  labs(y="Fishing Rate", x="Population Size", fill="Year", size="Year") +
+  guides(fill= guide_legend(), size=guide_legend()) +
+  scale_y_continuous(limits=c(0,2)) + scale_x_continuous(limits=c(0,3))
+  
+Obs <- log(delury1$CR)
+Pred <- sum_res[rownames(sum_res)=="pred_n",1]
+dat <- data.frame(Obs=Obs, Pred=Pred, START=factor(delury1$START))
+ggplot(dat, aes(x=Obs, y=Pred, color=START))+geom_point()+geom_abline(intercept=0, slope=1, linetype="dashed")+theme_bw()
+
+par_comp <- rbind(par_msy_ss[1,], par_msy, par_msy_ss[1,]/par_msy)
+rownames(par_comp) <- c("SS","Fox","Ratio")
+print(round(par_comp, 3))
+
+## 7 - 6 ランダム効果を含む統計量のバイアス補正
+
+sdrep_bc <- sdreport(obj, bias.correct=TRUE)
+# sdrep_bc <- sdreport(obj, bias.correct=TRUE, bias.correct.control = list(sd = TRUE))
+
+N0 <- summary(sdrep_bc)[rownames(summary(sdrep_bc))=="N_S",1:2]
+N0_bc <- summary(sdrep_bc)[rownames(summary(sdrep_bc))=="N_S",3:4]
+ggplot(dat=N0, aes(x=Year,y=N0[,1]))+geom_line()+geom_line(aes(x=Year,y=N0_bc[,1]),color="blue",linetype="dashed")+labs(x="Year", y="Population Size")+theme_bw()
+
+save(dat_ss, par_ss, delury, obj, mod_ss, sdrep, file="res_ss.rda")
+
