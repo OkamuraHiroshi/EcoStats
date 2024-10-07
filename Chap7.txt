@@ -38,7 +38,7 @@ var_saiga <- function(T) t(c(T, 1))%*%vcov(mod)%*%c(T, 1)+T*summary(mod)$sigma^2
 future_saiga <- function(T,N=1){
   pnorm(log(N), log(r)*T+log(N0), sqrt(var_saiga(T)))       # T年の対数個体数推定値と分散を与えたとき，個体数log(N)より小さくなる確率を計算
 }
-T_obs <- last(dat_kk$T[!is.na(dat_kk$Pop)])        # 個体数観測値が有効な年を抽出
+T_obs <- last(dat_kk$T[!is.na(dat_kk$Pop)])        # 個体数観測値が入った年の最後の値を抽出
 Prob_extinction <- sapply(c(16,26,100),function(t) future_saiga(t+T_obs,N=1))        # 16年後，26年後，100年後，個体数が閾値（N=1）を下回る確率を計算
 names(Prob_extinction) <- paste0("Time = ",c(16,26,100))       # 絶滅確率の結果の名前を設定
 Prob_extinction        # 絶滅確率計算結果を表示
@@ -53,49 +53,48 @@ rownames(P_ext) <- paste0("N* = ",c(1,50,500,5000))       # 行は閾値の違�
 P_ext       # 絶滅確率表の表示
 
 Future_mean_Pop <- exp(log(r)*(T_obs+1:100)+log(N0))       # 過去と将来の平均個体数
-Future_lo_Pop <- sapply(1:100, function(i) exp(log(r)*(T_obs+i)+log(N0)-qnorm(0.975)*sqrt(var_saiga(T_obs+i))))        # 個体数推定値の2.5%下限
-Future_up_Pop <- sapply(1:100, function(i) exp(log(r)*(T_obs+i)+log(N0)+qnorm(0.975)*sqrt(var_saiga(T_obs+i))))        # 個体数推定値の97.5%上限
+Future_lo_Pop <- sapply(1:100, function(i) exp(log(r)*(T_obs+i)+log(N0)-qnorm(0.975)*sqrt(var_saiga(T_obs+i))))        # 個体数推定値の2.5%点（予測区間の下限）
+Future_up_Pop <- sapply(1:100, function(i) exp(log(r)*(T_obs+i)+log(N0)+qnorm(0.975)*sqrt(var_saiga(T_obs+i))))        # 個体数推定値の97.5%点（予測区間の上限）
 
 Future_proj <- data.frame(Year=dat_kk$Year[dat_kk$T==T_obs]+1:100, Mean=Future_mean_Pop, Lo=Future_lo_Pop, Up=Future_up_Pop)        # 将来予測結果を表示するためのデータセット
 
-ggplot(Future_proj, aes(x=Year, y=Mean))+geom_ribbon(aes(ymin=Lo, ymax=Up),alpha=0.2) + labs(y="Population Size") + geom_hline(yintercept=5000,linetype="dashed")+geom_line(color="blue",linewidth=1.2)+theme_bw()      # 個体数の予測値の変化（95%信頼区間付き）．赤点線はN=5000．
+ggplot(Future_proj, aes(x=Year, y=Mean))+geom_ribbon(aes(ymin=Lo, ymax=Up),alpha=0.2) + labs(y="Population Size") + geom_hline(yintercept=5000,linetype="dashed")+geom_line(color="blue",linewidth=1.2)+theme_bw()      # 個体数の予測値の変化（95%予測区間付き）．赤点線はN=5000．
 
 ## 7 - 3　非線形モデルと密度効果
 
-var_saiga2 <- function(T) t(c(T, 1))%*%vcov(mod_uk)%*%c(T, 1)+T*summary(mod_uk)$sigma^2
-future_saiga2 <- function(T,N=1){
-  pnorm(log(N), log(r_uk)*T+log(N0_uk), sqrt(var_saiga2(T)))
+var_saiga2 <- function(T) t(c(T, 1))%*%vcov(mod_uk)%*%c(T, 1)+T*summary(mod_uk)$sigma^2      # ウスチュルト高原/カザフスタンのT年のサイガ個体数の分散を計算する関数（デルタ法）
+future_saiga2 <- function(T,N=1){        
+  pnorm(log(N), log(r_uk)*T+log(N0_uk), sqrt(var_saiga2(T)))      # T年後にウスチュルト高原/カザフスタンのサイガ個体数が閾値を下回る確率を計算する関数
 }
-T_obs2 <- last(dat_uk$T[!is.na(dat_uk$Pop)])
-Prob_extinction2 <- sapply(c(16,26,100),function(t) future_saiga(t+T_obs2,N=1))
-names(Prob_extinction2) <- paste0("Time = ",c(16,26,100))
-Future_mean_Pop2 <- exp(log(r_uk)*(T_obs2+1:100)+log(N0_uk))
-Future_lo_Pop2 <- sapply(1:100, function(i) exp(log(r_uk)*(T_obs2+i)+log(N0_uk)-qnorm(0.975)*sqrt(var_saiga(T_obs2+i))))
-Future_up_Pop2 <- sapply(1:100, function(i) exp(log(r_uk)*(T_obs2+i)+log(N0_uk)+qnorm(0.975)*sqrt(var_saiga(T_obs2+i))))
+T_obs2 <- last(dat_uk$T[!is.na(dat_uk$Pop)])        # 個体数観測値が入った年の最後の値を抽出
+Prob_extinction2 <- sapply(c(16,26,100),function(t) future_saiga(t+T_obs2,N=1))        # 16年後，26年後，100年後，個体数が閾値を下回る確率を計算
+names(Prob_extinction2) <- paste0("Time = ",c(16,26,100))       # 絶滅確率の結果の名前を設定
+Future_mean_Pop2 <- exp(log(r_uk)*(T_obs2+1:100)+log(N0_uk))       # 過去と将来の平均個体数
+Future_lo_Pop2 <- sapply(1:100, function(i) exp(log(r_uk)*(T_obs2+i)+log(N0_uk)-qnorm(0.975)*sqrt(var_saiga(T_obs2+i))))        # 個体数推定値の2.5%点
+Future_up_Pop2 <- sapply(1:100, function(i) exp(log(r_uk)*(T_obs2+i)+log(N0_uk)+qnorm(0.975)*sqrt(var_saiga(T_obs2+i))))        # 個体数推定値の97.5%点
 
-Future_proj2 <- data.frame(Year=dat_uk$Year[dat_uk$T==T_obs2]+1:100, Mean=Future_mean_Pop2, Lo=Future_lo_Pop2, Up=Future_up_Pop2)
+Future_proj2 <- data.frame(Year=dat_uk$Year[dat_uk$T==T_obs2]+1:100, Mean=Future_mean_Pop2, Lo=Future_lo_Pop2, Up=Future_up_Pop2)        # 将来予測結果を表示するためのデータセット
 
-ggplot(Future_proj2, aes(x=Year, y=Mean))+geom_ribbon(aes(ymin=Lo, ymax=Up),alpha=0.2) + labs(y="Population Size") + geom_hline(yintercept=5000,linetype="dashed")+geom_line(color="blue",linewidth=1.5)+scale_y_log10()+theme_bw()
+ggplot(Future_proj2, aes(x=Year, y=Mean))+geom_ribbon(aes(ymin=Lo, ymax=Up),alpha=0.2) + labs(y="Population Size") + geom_hline(yintercept=5000,linetype="dashed")+geom_line(color="blue",linewidth=1.5)+scale_y_log10()+theme_bw()      # 個体数の予測値の変化（95%予測区間付き）
 
-paurelia <- c(17, 29, 39, 63, 185, 258, 267, 392, 510, 570, 650, 560, 575, 650, 550, 480, 520, 500)
-names(paurelia) <- 1:length(paurelia)-1
-plot(as.numeric(names(paurelia)), paurelia, pch=16, xlab="日", ylab="個体数")
+paurelia <- c(17, 29, 39, 63, 185, 258, 267, 392, 510, 570, 650, 560, 575, 650, 550, 480, 520, 500)      # ゾウリムシのデータ
+names(paurelia) <- 1:length(paurelia)-1        # 日にちのラベルを設定
+plot(as.numeric(names(paurelia)), paurelia, pch=16, xlab="日", ylab="個体数")        # ゾウリムシ個体数変化の図
 
-dat_p <- paurelia %>% as.data.frame %>% rename("N"=1) %>% rownames_to_column("Time")
-n <- nrow(dat_p)
-N2 <- dat_p$N[2:n]
-N1 <- dat_p$N[1:(n-1)]
-mod_l <- nls(N2~N1+r*N1*(1-N1/K), start=list(r=0.5, K=600))
-( params <- c(r=summary(mod_l)$coef[1,1], K=summary(mod_l)$coef[2,1]) )
-N <- seq(0,600,by=10)
-plot(N1, N2, xlab=expression(N[t]), ylab=expression(N[t+1]), pch=16)
-lines(N1, predict(mod_l), col="blue", lwd=2)
+dat_p <- paurelia %>% as.data.frame %>% rename("N"=1) %>% rownames_to_column("Time")        # ゾウリムシデータをデータフレームに変換
+n <- nrow(dat_p)       # サンプルサイズ
+N2 <- dat_p$N[2:n]         # N_{t+1}にあたる個体数の時系列
+N1 <- dat_p$N[1:(n-1)]        # N_tにあたる個体数の時系列
+mod_l <- nls(N2~N1+r*N1*(1-N1/K), start=list(r=0.5, K=600))         # 非線形最小二乗法によってロジスティックモデルを適用
+( params <- c(r=summary(mod_l)$coef[1,1], K=summary(mod_l)$coef[2,1]) )         # 回帰係数から増加率と環境収容量を計算
+plot(N1, N2, xlab=expression(N[t]), ylab=expression(N[t+1]), pch=16)       # N_tに対するN_{t+1}のプロット
+lines(N1, predict(mod_l), col="blue", lwd=2)        # ロジスティックモデルによる予測値
 
 ## 7 - 4 最大持続生産量
 
-delury <- read.csv("DeLury.csv")
-delury <- delury %>% mutate(Cat=Catch/Mass, CR=CPUE/Mass)
-TC <- delury %>% group_by(Year) %>% summarize(TC=sum(Cat))
+delury <- read.csv("DeLury.csv")         # 6章で使用したデルーリー法のデータを読み込み
+delury <- delury %>% mutate(Cat=Catch/Mass, CR=CPUE/Mass)        # 平均重量（Mass）で割ってやることにより個体数に変換
+TC <- delury %>% group_by(Year) %>% summarize(TC=sum(Cat))        # 各年の累積漁獲尾数を計算
 del_res <- lapply(1987:2000, function(i) lm(CR~cumsum(Cat),data=subset(delury, Year==i)))
 lm_res <- sapply(1:length(del_res), function(i) c(-del_res[[i]]$coef[2], -del_res[[i]]$coef[1]/del_res[[i]]$coef[2]))
 lm_res <- rbind(lm_res, TC$TC)
