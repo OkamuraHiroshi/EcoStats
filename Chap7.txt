@@ -95,23 +95,23 @@ lines(N1, predict(mod_l), col="blue", lwd=2)        # ロジスティックモ�
 delury <- read.csv("DeLury.csv")         # 6章で使用したデルーリー法のデータを読み込み
 delury <- delury %>% mutate(Cat=Catch/Mass, CR=CPUE/Mass)        # 平均重量（Mass）で割ってやることにより個体数に変換
 TC <- delury %>% group_by(Year) %>% summarize(TC=sum(Cat))        # 各年の累積漁獲尾数を計算
-del_res <- lapply(1987:2000, function(i) lm(CR~cumsum(Cat),data=subset(delury, Year==i)))
-lm_res <- sapply(1:length(del_res), function(i) c(-del_res[[i]]$coef[2], -del_res[[i]]$coef[1]/del_res[[i]]$coef[2]))
-lm_res <- rbind(lm_res, TC$TC)
-lm_res <- as.data.frame(t(lm_res))
-names(lm_res) <- c("q","N0","Catch")
-rownames(lm_res) <- 1987:2000
+del_res <- lapply(1987:2000, function(i) lm(CR~cumsum(Cat),data=subset(delury, Year==i)))        # 各年ごとにデルーリー法（線形回帰）を適用
+lm_res <- sapply(1:length(del_res), function(i) c(-del_res[[i]]$coef[2], -del_res[[i]]$coef[1]/del_res[[i]]$coef[2]))        # 各年の漁獲効率と初期個体数
+lm_res <- rbind(lm_res, TC$TC)        # 累積漁獲尾数の列を追加
+lm_res <- as.data.frame(t(lm_res))       # 結果をまとめたものをデータフレーム化
+names(lm_res) <- c("q","N0","Catch")       # 列名を指定
+rownames(lm_res) <- 1987:2000        # 行名（年）を指定
 
-obj <- function(p, dat, model="logistic", dd=10^(-6)){
-  r <- exp(p[1])
-  K <- exp(p[2])
+obj <- function(p, dat, model="logistic", dd=10^(-6)){       # 初期個体数にロジスティックモデルまたはフォックスモデルを適用する最適化関数
+  r <- exp(p[1])       # 増加率
+  K <- exp(p[2])       # 環境収容量
   
-  nT <- nrow(dat)
+  nT <- nrow(dat)       # サンプルサイズ（年数）
   
-  N <- dat$N0
-  Cat <- dat$Catch
+  N <- dat$N0         # 初期個体数
+  Cat <- dat$Catch        # 総漁獲尾数
   
-  like <- 0
+  like <- 0        # 目的関数の入れ物
   for (i in 1:(nT-1)){
     if (model=="logistic") like <- like + (log(N[i+1]) - log(max(N[i]+r*N[i]*(1-N[i]/K)-Cat[i],dd)))^2
     if (model=="fox") like <- like + (log(N[i+1]) - log(max(N[i]+r*N[i]*(1-log(N[i])/log(K))-Cat[i],dd)))^2
