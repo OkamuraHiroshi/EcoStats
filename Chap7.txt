@@ -131,11 +131,11 @@ names(parms) <- c("r", "K")        # 名前をつける
 par_msy <- c(Fmsy=as.numeric(parms["r"]/log(parms["K"])), Nmsy=as.numeric(parms["K"]/exp(1)), MSY=as.numeric(parms["r"]*parms["K"]/(exp(1)*log(parms["K"]))))        # 増加率と環境収容量からF_{MSY}，N_{MSY}，MSYを計算
 print(par_msy, 2)　　　　　# MSY関連パラメータの推定結果を表示
 
-rel_N <- dat$N0/par_msy["Nmsy"]
-rel_F <- (dat$Catch/dat$N0)/par_msy["Fmsy"]
-out_fox <- data.frame(Y=as.numeric(rownames(dat)), N=rel_N, U=rel_F)  
-min_Y <- min(out_fox$Y)
-max_Y <- max(out_fox$Y)
+rel_N <- dat$N0/par_msy["Nmsy"]      # 初期個体数の推定値をMSYの個体数で割って相対値にしたもの
+rel_F <- (dat$Catch/dat$N0)/par_msy["Fmsy"]       # 漁獲率をMSYの漁獲率で割って相対値にしたもの
+out_fox <- data.frame(Y=as.numeric(rownames(dat)), N=rel_N, U=rel_F)        # 年と個体数/漁獲率の相対値をひとつにしたデータセット
+min_Y <- min(out_fox$Y)         # データの開始年
+max_Y <- max(out_fox$Y)         # データの最終年
 ggplot(out_fox, aes(x = N, y = U)) + theme_bw() +
   geom_rect(xmin = 1, xmax = 2, ymin = 0, ymax = 1, fill = 'green', alpha = 0.05) +
   geom_rect(xmin = 0, xmax = 1, ymin = 1, ymax = 2, fill = 'red', alpha = 0.05) +
@@ -147,55 +147,55 @@ ggplot(out_fox, aes(x = N, y = U)) + theme_bw() +
   scale_size_continuous(limits=c(min_Y,max_Y),breaks=seq(min_Y,max_Y,by=1)) +
   labs(y="Fishing Rate", x="Population Size", fill="Year", size="Year") +
   guides(fill= guide_legend(), size=guide_legend()) +
-  scale_y_continuous(limits=c(0,2)) + scale_x_continuous(limits=c(0,2))
+  scale_y_continuous(limits=c(0,2)) + scale_x_continuous(limits=c(0,2))         # Kobeプロット（資源状態の診断プロット）の描画
 
-N0 <- lm_res$N0
-Cat <- lm_res$Catch
-r <- parms["r"]
-K <- parms["K"]
-N1_pred <- N0+r*N0*(1-log(N0)/log(K))-Cat
-dat_fox <- data.frame(Obs=log(N0[-1]), Pred=log(N1_pred[-length(N0)]))
-ggplot(dat_fox, aes(x=Obs, y=Pred))+geom_point()+geom_abline(intercept=0, slope=1, linetype="dashed")+xlim(5,7.5)+ylim(5,7.5)+theme_bw()
+N0 <- lm_res$N0        # 初期個体数
+Cat <- lm_res$Catch        # 総漁獲尾数
+r <- parms["r"]        # 増加率
+K <- parms["K"]        # 環境収容量
+N1_pred <- N0+r*N0*(1-log(N0)/log(K))-Cat       # フォックスモデルによる予測値
+dat_fox <- data.frame(Obs=log(N0[-1]), Pred=log(N1_pred[-length(N0)]))        # 初期個体数の時系列（観測値）とフォックスモデルの予測値を並べる
+ggplot(dat_fox, aes(x=Obs, y=Pred))+geom_point()+geom_abline(intercept=0, slope=1, linetype="dashed")+xlim(5,7.5)+ylim(5,7.5)+theme_bw()        # 観測値と予測値を比較
 
 ## 7 - 5 状態空間モデル
 
-dat1 <- lm_res %>% rownames_to_column("Year") %>% mutate_at(vars(Year), as.numeric)
-p1 <- ggplot(dat1, aes(x=Year, y=N0)) + geom_point() + geom_line() + ylim(0, 1600) + theme_bw()
-p2 <- ggplot(dat1, aes(x=Year, y=q)) + geom_point() + geom_line() + theme_bw()
-cowplot::plot_grid(p1, p2)
+dat1 <- lm_res %>% rownames_to_column("Year") %>% mutate_at(vars(Year), as.numeric)       # lm_resデータの行ラベル（年）を新しく年とし，それを数値データにしたものをdat1とする
+p1 <- ggplot(dat1, aes(x=Year, y=N0)) + geom_point() + geom_line() + ylim(0, 1600) + theme_bw()        # 年に対する初期個体数の変化をプロット
+p2 <- ggplot(dat1, aes(x=Year, y=q)) + geom_point() + geom_line() + theme_bw()        # 年に対する漁獲効率の変化をプロット
+cowplot::plot_grid(p1, p2)       # ２つの図を並べて表示
 
-sink("delury_ss.cpp")
-cat("
+sink("delury_ss.cpp")        # delury_ss.cppというTMB計算用ファイルを作成し，下のコードを書き込む
+cat("        // " "内のものを書き込みする
 
 // State-Space Delury Model
 
-#include <TMB.hpp>
-#include <iostream>
+#include <TMB.hpp>      // TMBのヘッダファイル
+#include <iostream>      // Cppの入出力に関するヘッダファイル
 
-template<class Type>
+template<class Type>      // TMBのテンプレートですよという指定
 Type objective_function<Type>::operator() ()
 {
   // DATA //
-  DATA_VECTOR(CPUE);
-  DATA_VECTOR(CAT);
-  DATA_IVECTOR(YEAR);
-  DATA_IVECTOR(START);
-  DATA_IVECTOR(END);
-  DATA_INTEGER(Y);
+  DATA_VECTOR(CPUE);      // CPUEの時系列データ
+  DATA_VECTOR(CAT);      // 漁獲尾数の時系列データ
+  DATA_IVECTOR(YEAR);      // 年
+  DATA_IVECTOR(START);      // 年内の開始時点を示す変数
+  DATA_IVECTOR(END);      // 年内の終了時点を示す変数
+  DATA_INTEGER(Y);      // 年数
   
   // PARAMETER //
-  PARAMETER(log_r);
-  PARAMETER(logit_b);
-  PARAMETER(tilde_n0);
-  PARAMETER(log_tilde_q);
-  PARAMETER(log_sigma);
-  PARAMETER(log_tau);
-  PARAMETER(log_eta);
-  PARAMETER_VECTOR(log_q);  
-  PARAMETER_VECTOR(n0);
+  PARAMETER(log_r);      // 増加率の対数値にあたるパラメータ
+  PARAMETER(logit_b);      // 密度効果の対数値にあたるパラメータ
+  PARAMETER(tilde_n0);      // 初期個体数の対数値にあたるパラメータ
+  PARAMETER(log_tilde_q);      // 初期漁獲効率の対数値の平均にあたるパラメータ
+  PARAMETER(log_sigma);      // 個体数変動（標準偏差）の対数値のパラメータ
+  PARAMETER(log_tau);      // CPUE変動の対数値のパラメータ
+  PARAMETER(log_eta);      // 漁獲効率変動の対数値のパラメータ
+  PARAMETER_VECTOR(log_q);      // 漁獲効率の対数値（ランダム効果）
+  PARAMETER_VECTOR(n0);      // 初期個体数の対数値（ランダム効果）
   
   // PARAMETER TRANSFORMATION //
-  Type r = exp(log_r);
+  Type r = exp(log_r);       // 増加率の対数値を増加率に変換
   Type b = Type(1.0)/(Type(1.0)+exp(-logit_b));
   Type sigma = exp(log_sigma);
   Type tau = exp(log_tau);
