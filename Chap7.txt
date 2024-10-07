@@ -113,23 +113,23 @@ obj <- function(p, dat, model="logistic", dd=10^(-6)){       # 初期個体数�
   
   like <- 0        # 目的関数の入れ物
   for (i in 1:(nT-1)){
-    if (model=="logistic") like <- like + (log(N[i+1]) - log(max(N[i]+r*N[i]*(1-N[i]/K)-Cat[i],dd)))^2
-    if (model=="fox") like <- like + (log(N[i+1]) - log(max(N[i]+r*N[i]*(1-log(N[i])/log(K))-Cat[i],dd)))^2
+    if (model=="logistic") like <- like + (log(N[i+1]) - log(max(N[i]+r*N[i]*(1-N[i]/K)-Cat[i],dd)))^2       # ロジスティックモデルの場合の最小二乗法の目的関数
+    if (model=="fox") like <- like + (log(N[i+1]) - log(max(N[i]+r*N[i]*(1-log(N[i])/log(K))-Cat[i],dd)))^2       # フォックスモデルの場合の最小二乗法の目的関数
   }
 
-  like
+  like       # 目的関数のアウトプット
 }
 
-dat <- lm_res
-p0 <- c(log(mean(dat$Catch/dat$N0)), log(max(dat$N0)))
-mod_log <- nlm(obj, p0, dat=dat, model="logistic")
-mod_fox <- nlm(obj, p0, dat=dat, model="fox")
-print(c(sse_log=mod_log$minimum, sse_fox=mod_fox$minimum), 3)
+dat <- lm_res       # 線形回帰の結果のデータをdatにコピー
+p0 <- c(log(mean(dat$Catch/dat$N0)), log(max(dat$N0)))       # 増加率と環境収容量の対数値の初期値を設定
+mod_log <- nlm(obj, p0, dat=dat, model="logistic")         # ロジスティックモデルのフィット
+mod_fox <- nlm(obj, p0, dat=dat, model="fox")          # フォックスモデルのフィット
+print(c(sse_log=mod_log$minimum, sse_fox=mod_fox$minimum), 3)         # ロジスティックモデルとフォックスモデルの目的関数の値を比較
 
-parms <- exp(mod_fox$estimate)
-names(parms) <- c("r", "K")
-par_msy <- c(Fmsy=as.numeric(parms["r"]/log(parms["K"])), Nmsy=as.numeric(parms["K"]/exp(1)), MSY=as.numeric(parms["r"]*parms["K"]/(exp(1)*log(parms["K"])))) 
-print(par_msy, 2) 
+parms <- exp(mod_fox$estimate)        # フォックスモデルのパラメータ推定値を抽出
+names(parms) <- c("r", "K")        # 名前をつける
+par_msy <- c(Fmsy=as.numeric(parms["r"]/log(parms["K"])), Nmsy=as.numeric(parms["K"]/exp(1)), MSY=as.numeric(parms["r"]*parms["K"]/(exp(1)*log(parms["K"]))))        # 増加率と環境収容量からF_{MSY}，N_{MSY}，MSYを計算
+print(par_msy, 2)　　　　　# MSY関連パラメータの推定結果を表示
 
 rel_N <- dat$N0/par_msy["Nmsy"]
 rel_F <- (dat$Catch/dat$N0)/par_msy["Fmsy"]
