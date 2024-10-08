@@ -196,94 +196,94 @@ Type objective_function<Type>::operator() ()
   
   // PARAMETER TRANSFORMATION //
   Type r = exp(log_r);       // 増加率の対数値を増加率に変換
-  Type b = Type(1.0)/(Type(1.0)+exp(-logit_b));
-  Type sigma = exp(log_sigma);
-  Type tau = exp(log_tau);
-  Type eta = exp(log_eta);
-  int T = CPUE.size();
+  Type b = Type(1.0)/(Type(1.0)+exp(-logit_b));       // 0 < b < 1に変換
+  Type sigma = exp(log_sigma);       // sigmaに変換
+  Type tau = exp(log_tau);        // tauに変換
+  Type eta = exp(log_eta);        // etaに変換
+  int T = CPUE.size();        // 年*週に対応するサンプルサイズ
   
-  vector<Type> q(Y);
-  vector<Type> n_last(Y);
-  vector<Type> N_S(Y);
-  vector<Type> N_E(Y);
-  vector<Type> U(T);
-  vector<Type> n(T);
-  vector<Type> N(T);
-  vector<Type> pred_n(T);
+  vector<Type> q(Y);       // 漁獲効率
+  vector<Type> n_last(Y);      // 漁期最後の個体数（対数値）
+  vector<Type> N_S(Y);      // 漁期開始時の個体数
+  vector<Type> N_E(Y);      // 漁期最後の個体数
+  vector<Type> U(T);       // 漁獲率
+  vector<Type> n(T);       // [年, 週]の個体数（対数値）
+  vector<Type> N(T);       // [年, 週]の個体数（対数変換なし）
+  vector<Type> pred_n(T);       // モデルによる [年, 週]の個体数（対数値）の予測値
      
-  Type nll = 0.0;
+  Type nll = 0.0;       // 目的関数の入れ物
       
   // DeLury Model
   
   for (int i=0;i<T;i++){
-    if (START(i)==1) {
-      if (i==0) nll += -dnorm(log_q(YEAR(i)),log_tilde_q,eta,true); 
-      if (i > 0) nll += -dnorm(log_q(YEAR(i)),log_q(YEAR(i)-1),eta,true);
-      n(i) = n0(YEAR(i));
-      N(i) = exp(n(i));
-      N_S(YEAR(i)) = N(i);
-      U(i) = CAT(i)/N(i);
+    if (START(i)==1) {         // 漁獲開始時
+      if (i==0) nll += -dnorm(log_q(YEAR(i)),log_tilde_q,eta,true);        // 1番最初の年の漁獲効率
+      if (i > 0) nll += -dnorm(log_q(YEAR(i)),log_q(YEAR(i)-1),eta,true);           // 2年目以降の漁獲効率（ランダムウォーク）
+      n(i) = n0(YEAR(i));        // 漁獲開始時の個体数の対数値
+      N(i) = exp(n(i));         // 漁獲開始時の個体数
+      N_S(YEAR(i)) = N(i);        // 漁獲開始時の個体数
+      U(i) = CAT(i)/N(i);        // 漁獲率
     }
     if (START(i)==0) {
-      n(i) = n(i-1)+log(Type(1.0)-U(i-1));
-      N(i) = exp(n(i));
-      U(i) = CAT(i)/N(i);
+      n(i) = n(i-1)+log(Type(1.0)-U(i-1));       // 漁獲から生き残った個体数の対数値
+      N(i) = exp(n(i));         // 漁獲から生き残った個体数
+      U(i) = CAT(i)/N(i);        // 漁獲率
     }
-    U(i) = CppAD::CondExpLe(Type(1.0)-U(i),Type(0.0),Type(0.9999),U(i));
-    if (END(i)==1){
-      n_last(YEAR(i)) = n(i)+log(Type(1.0)-U(i));
-      N_E(YEAR(i)) = exp(n_last(YEAR(i)));
+    U(i) = CppAD::CondExpLe(Type(1.0)-U(i),Type(0.0),Type(0.9999),U(i));       // 漁獲率が1を超えないようにするための制約
+    if (END(i)==1){         // 漁獲終了時
+      n_last(YEAR(i)) = n(i)+log(Type(1.0)-U(i));        // 最終的な生残個体数の対数値
+      N_E(YEAR(i)) = exp(n_last(YEAR(i)));         // 最終的な生残個体数（親個体数）
     }
 
-    pred_n(i) = log_q(YEAR(i))+n(i);
-    nll += -dnorm(log(CPUE(i)),pred_n(i),tau,true);
+    pred_n(i) = log_q(YEAR(i))+n(i);          // モデルから予測される対数個体数の相対値
+    nll += -dnorm(log(CPUE(i)),pred_n(i),tau,true);         // 観測モデルの負の対数尤度
   }
   
   // Density-Dependent Model
   
-  nll += -dnorm(n0(0),tilde_n0,sigma/b,true);
+  nll += -dnorm(n0(0),tilde_n0,sigma/b,true);       // 最初の年の漁獲開始時の対数個体数推定値
   for (int i=1;i<Y;i++){
-    nll += -dnorm(n0(i),log_r+(Type(1.0)-b)*n_last(i-1),sigma,true);
+    nll += -dnorm(n0(i),log_r+(Type(1.0)-b)*n_last(i-1),sigma,true);        // 密度効果を考慮した漁獲開始時個体数の動態モデル
   }
   
-  q = exp(log_q);
-  Type Umsy = b;
-  Type N_eq = exp((log_r+(Type(1.0)-b)*log(Type(1.0)-b))/b);
-  Type MSY = Umsy*N_eq;
-  Type N0_new = exp(log_r+(Type(1.0)-b)*n_last(Y-1));
+  q = exp(log_q);        // 漁獲効率
+  Type Umsy = b;        // MSYにあたる漁獲率
+  Type N_eq = exp((log_r+(Type(1.0)-b)*log(Type(1.0)-b))/b);       // MSYにあたる個体数
+  Type MSY = Umsy*N_eq;         // MSY
+  Type N0_new = exp(log_r+(Type(1.0)-b)*n_last(Y-1));        // 翌年の漁獲前の個体数の予測値
   
   // ADREPORTS
   
-  ADREPORT(r);
-  ADREPORT(b);
-  ADREPORT(sigma);
-  ADREPORT(tau);
-  ADREPORT(eta);
-  ADREPORT(q);
-  ADREPORT(U);
-  ADREPORT(N_S);
-  ADREPORT(N_E);
-  ADREPORT(Umsy);
-  ADREPORT(N_eq);
-  ADREPORT(MSY);  
-  ADREPORT(pred_n);
-  ADREPORT(N);
-  ADREPORT(N0_new);
+  ADREPORT(r);        // 増加率の推定値と標準誤差をレポート（=ADREPORT）させる
+  ADREPORT(b);        // 密度効果のADREPORT
+  ADREPORT(sigma);        // プロセス標準偏差のADREPORT
+  ADREPORT(tau);         // 観測誤差のADREPORT
+  ADREPORT(eta);         // 漁獲効率の誤差のADREPORT
+  ADREPORT(q);         // 漁獲効率のADREPORT
+  ADREPORT(U);         // 漁獲率のADREPORT
+  ADREPORT(N_S);         // 漁獲開始時の個体数のADREPORT
+  ADREPORT(N_E);         // 漁獲終了時の個体数のADREPORT
+  ADREPORT(Umsy);         // MSYの漁獲率のADREPORT
+  ADREPORT(N_eq);         // MSYの個体数のADREPORT
+  ADREPORT(MSY);         // MSYのADREPORT
+  ADREPORT(pred_n);        // 個体数の対数値の予測値のADREPORT
+  ADREPORT(N);         // 個体数のADREPORT
+  ADREPORT(N0_new);       // 最終年翌年の個体数推定値のADREPORT
     
-  return nll;
+  return nll;       // 目的関数
 }
-", fill=TRUE)
-sink()
+", fill=TRUE)      # 最後を改行
+sink()     # 外部ファイルへのアクセスを終了
 
-library(TMB)
-compile("delury_ss.cpp")
-dyn.load(dynlib("delury_ss"))
+library(TMB)       # TMBパッケージを読み込み
+compile("delury_ss.cpp")       # delury_ss.cpp（上で作ったTMBコード）をコンパイル
+dyn.load(dynlib("delury_ss"))       # delury_ssのDLLを作成
 
 delury1 <- delury %>% mutate(Y=Year-min(Year)) %>%
-group_by(Year) %>% mutate(W=Week-min(Week), START=(W==0), END=(W==max(W)))
-nY <- max(delury1$Y)+1
-dat_ss <- list(CPUE=delury1$CR, CAT=delury1$Cat, YEAR=delury1$Y, START=as.numeric(delury1$START), END=as.numeric(delury1$END), Y=nY)
-par_ss <- list(
+group_by(Year) %>% mutate(W=Week-min(Week), START=(W==0), END=(W==max(W)))      # deluryデータを整形
+nY <- max(delury1$Y)+1        # 年数
+dat_ss <- list(CPUE=delury1$CR, CAT=delury1$Cat, YEAR=delury1$Y, START=as.numeric(delury1$START), END=as.numeric(delury1$END), Y=nY)       # delury_ssのインプットデータ
+par_ss <- list(         # delury_ssのパラメータの初期値
   log_r=log(6),
   logit_b=0,
   tilde_n0=mean(log(lm_res$N0)),
