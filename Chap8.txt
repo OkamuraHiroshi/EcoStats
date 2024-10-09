@@ -2,4 +2,57 @@
 
 ## 8 - 1 シミュレーションモデルを作ろう！
 
+library(mvtnorm)       # mvtnormパッケージを読み込む
+library(TMB)         # TMBパッケージを読み込む
+library(tidyverse)       # tidyverseパッケージを読み込む
+load("res_ss.rda")       # 7章で作ったRファイルを読み込む
+mu_p <- sdrep$par.fixed       # 7章の状態空間モデルから推定された固定効果パラメータ
+Sigma_p <- sdrep$cov.fixed       # 状態空間モデルの固定効果の分散共分散
+Cor_p <- cov2cor(Sigma_p)      # 分散共分散行列を相関行列に変換
+Sim <- 100       # シミュレーション回数
+gen_par <- rmvnorm(Sim, mu_p, Sigma_p)        # パラメータを多変量正規分布から発生
+
+logit <- function(x) log(x/(1-x))
+ilogit <- function(x) 1/(1+exp(-x))
+pop_update <- function(p,x,eps) p[,1]+(1-p[,2])*x+eps
+transform_b <- function(pars, b_max, b_min){
+  logit_b <- ifelse(pars$logit_b < logit(b_min), logit(b_min), ifelse(pars$logit_b > logit(b_max), logit(b_max), pars$logit_b))
+  return(logit_b)
+}
+make_b <- function(x) ilogit(x)
+make_Umsy <- function(x,y) y
+Pop_simulator <- function(parms, sdrep, dat, seed0=1, b_max=0.95, b_min=0.05, b_type="logit_b"){
+  pars <- as.data.frame(parms)
+  Sim <- nrow(pars)
+  nY <- dat$Y
+  nT <- length(dat$CPUE)
+  n0 <- n_last <- matrix(NA, nrow=nY, ncol=Sim)
+  n <- u <- matrix(NA, nrow=nT, ncol=Sim)
+  log_r <- pars$log_r
+  pars[,b_type] <- transform_b(pars, b_max, b_min)
+  b <- make_b(pars[,b_type])
+  sigma <- exp(pars$log_sigma)
+  eps <- matrix(rnorm(nY*Sim,0,sigma),nrow=nY,ncol=Sim,byrow=TRUE)
+  YEAR <- dat$YEAR+1
+  START <- dat$START
+  END <- dat$END
+  U <- summary(sdrep)[rownames(summary(sdrep))=="U",]
+  logit_U <- cbind(logit(U[,1]), (1/(U[,1]*(1-U[,1])))*U[,2])
+  Umsy <- make_Umsy(log_r,b)
+  set.seed(seed0)
+  
+  for (i in 1:nT){
+      u[i,] <- ilogit(rnorm(Sim, logit_U[i,1], logit_U[i,2]))
+      if (START[i]==1) {
+        if (i==1) n0[YEAR[i],] <- pars$tilde_n0 else n0[YEAR[i],] <- pop_update(cbind(log_r,b),n_last[YEAR[i]-1,],eps[YEAR[i]-1,])
+        n[i,] <- n0[YEAR[i],]
+      }
+      if (START[i]==0) n[i,] <- n[i-1,]+log(1-u[i-1,])
+      if (END[i]==1) n_last[YEAR[i],] <- n[i,]+log(1-u[i,])
+  }
+  n0_new <- pop_update(cbind(log_r,b),n_last[nY,],eps[nY,])
+  list(parms=pars, Umsy=Umsy, n0=n0, n_last=n_last, n0_new=n0_new, n=n, u=u)
+}
+pops <- Pop_simulator(gen_par, sdrep, dat_ss)
+
 
