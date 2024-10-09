@@ -12,8 +12,8 @@ Cor_p <- cov2cor(Sigma_p)      # 分散共分散行列を相関行列に変換
 Sim <- 100       # シミュレーション回数
 gen_par <- rmvnorm(Sim, mu_p, Sigma_p)        # パラメータを多変量正規分布から発生
 
-logit <- function(x) log(x/(1-x))
-ilogit <- function(x) 1/(1+exp(-x))
+logit <- function(x) log(x/(1-x))      # ロジット変換をする関数を定義
+ilogit <- function(x) 1/(1+exp(-x))       # ロジット逆変換をする関数を定義
 pop_update <- function(p,x,eps) p[,1]+(1-p[,2])*x+eps
 transform_b <- function(pars, b_max, b_min){
   logit_b <- ifelse(pars$logit_b < logit(b_min), logit(b_min), ifelse(pars$logit_b > logit(b_max), logit(b_max), pars$logit_b))
