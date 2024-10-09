@@ -14,17 +14,17 @@ gen_par <- rmvnorm(Sim, mu_p, Sigma_p)        # パラメータを多変量正�
 
 logit <- function(x) log(x/(1-x))      # ロジット変換をする関数を定義
 ilogit <- function(x) 1/(1+exp(-x))       # ロジット逆変換をする関数を定義
-pop_update <- function(p,x,eps) p[,1]+(1-p[,2])*x+eps
-transform_b <- function(pars, b_max, b_min){
-  logit_b <- ifelse(pars$logit_b < logit(b_min), logit(b_min), ifelse(pars$logit_b > logit(b_max), logit(b_max), pars$logit_b))
-  return(logit_b)
+pop_update <- function(p,x,eps) p[,1]+(1-p[,2])*x+eps       # 予測加入の対数値を計算する関数
+transform_b <- function(pars, b_max, b_min){        # bに制約をいれる関数
+  logit_b <- ifelse(pars$logit_b < logit(b_min), logit(b_min), ifelse(pars$logit_b > logit(b_max), logit(b_max), pars$logit_b))       # bに対する制約
+  return(logit_b)     # logit(b)を戻す
 }
-make_b <- function(x) ilogit(x)
-make_Umsy <- function(x,y) y
-Pop_simulator <- function(parms, sdrep, dat, seed0=1, b_max=0.95, b_min=0.05, b_type="logit_b"){
-  pars <- as.data.frame(parms)
-  Sim <- nrow(pars)
-  nY <- dat$Y
+make_b <- function(x) ilogit(x)     # bを与える関数（ここでは特に必要ないが，一般の再生産関係などで必要）
+make_Umsy <- function(x,y) y        # Umsyを与える関数（ここでも特に必要はないが，一般には必要）
+Pop_simulator <- function(parms, sdrep, dat, seed0=1, b_max=0.95, b_min=0.05, b_type="logit_b"){        # 個体数変化をシミュレーションするプログラム
+  pars <- as.data.frame(parms)        # パラメータの行列をデータフレーム化
+  Sim <- nrow(pars)        # シミュレーション回数はパラメータの行数
+  nY <- dat$Y        # 
   nT <- length(dat$CPUE)
   n0 <- n_last <- matrix(NA, nrow=nY, ncol=Sim)
   n <- u <- matrix(NA, nrow=nT, ncol=Sim)
