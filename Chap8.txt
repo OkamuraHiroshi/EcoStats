@@ -24,11 +24,11 @@ make_Umsy <- function(x,y) y        # Umsyを与える関数（ここでも特�
 Pop_simulator <- function(parms, sdrep, dat, seed0=1, b_max=0.95, b_min=0.05, b_type="logit_b"){        # 個体数変化をシミュレーションするプログラム
   pars <- as.data.frame(parms)        # パラメータの行列をデータフレーム化
   Sim <- nrow(pars)        # シミュレーション回数はパラメータの行数
-  nY <- dat$Y        # 
-  nT <- length(dat$CPUE)
-  n0 <- n_last <- matrix(NA, nrow=nY, ncol=Sim)
-  n <- u <- matrix(NA, nrow=nT, ncol=Sim)
-  log_r <- pars$log_r
+  nY <- dat$Y        # データの年数
+  nT <- length(dat$CPUE)       # サンプルサイズ（漁獲が行われた週数の総和）
+  n0 <- n_last <- matrix(NA, nrow=nY, ncol=Sim)        # 漁獲開始時の個体数と漁獲終了時の個体数（対数スケールで）
+  n <- u <- matrix(NA, nrow=nT, ncol=Sim)       # 週ごとの個体数と漁獲率の変化
+  log_r <- pars$log_r        # 増加率の対数値のパラメータ
   pars[,b_type] <- transform_b(pars, b_max, b_min)
   b <- make_b(pars[,b_type])
   sigma <- exp(pars$log_sigma)
