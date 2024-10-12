@@ -90,20 +90,19 @@ dat3 <- data.frame(Year=unique(delury$Year), n_last=mean_n_last, lo=ci_n_last[1,
 ggplot(dat3, aes(x=Year, y=n_last))+geom_ribbon(aes(ymin=lo, ymax=up), alpha=0.2) + labs(y="log Population Size")+geom_line(color="blue", linewidth=1.2)+geom_point(aes(y=est_n_last))          # 元のとシミュレーションによる漁獲後の個体数の対数値の比較プロット
 
 Simulated_data <- function(dat, sdrep, Sim=1000, p=0.1, seed0=1, b_max=0.95, b_min=0.05, b_type="logit_b"){        # シミュレーションデータを作成するプログラム
-  set.seed(seed0)
-  YEAR <- dat$YEAR+1
-  START <- dat$START
-  END <- dat$END
+  set.seed(seed0)        # 乱数を設定
+  YEAR <- dat$YEAR+1        # 年（R用に1からスタートにする）
+  START <- dat$START        # 漁獲開始時点を示す変数
+  END <- dat$END        # 漁獲終了時点を示す変数
   
-  mu_p <- sdrep$par.fixed
-  Sigma_p <- sdrep$cov.fixed
+  mu_p <- sdrep$par.fixed        # 固定効果パラメータ
+  Sigma_p <- sdrep$cov.fixed        # 固定効果の分散共分散
 
-  gen_par <- rmvnorm(Sim, mu_p, Sigma_p)
-  pops <- Pop_simulator(gen_par, sdrep, dat, seed0, b_max, b_min, b_type)
-  gen_par <- pops$parms
-  nY <- dat$Y
-  est_n0 <- summary(sdrep)[rownames(summary(sdrep))=="n0",]
-  Umsy <- pops$Umsy
+  gen_par <- rmvnorm(Sim, mu_p, Sigma_p)        # パラメータのシミュレーションデータ（多変量正規分布からランダムに生成）
+  pops <- Pop_simulator(gen_par, sdrep, dat, seed0, b_max, b_min, b_type)        # 個体群モデルのシミュレーション
+  nY <- dat$Y        # 年数
+  est_n0 <- summary(sdrep)[rownames(summary(sdrep))=="n0",]        # 初期個体数対数値の推定値
+  Umsy <- pops$Umsy        # MSYの漁獲率
   
   W <- sapply(1:Sim, function(i) 1/nY*sum(dnorm(pops$n0[,i],est_n0[,1],est_n0[,2],log=TRUE)))
   W <- W-max(W)
