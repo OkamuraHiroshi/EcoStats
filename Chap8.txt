@@ -29,30 +29,410 @@ Pop_simulator <- function(parms, sdrep, dat, seed0=1, b_max=0.95, b_min=0.05, b_
   n0 <- n_last <- matrix(NA, nrow=nY, ncol=Sim)        # 漁獲開始時の個体数と漁獲終了時の個体数（対数スケールで）
   n <- u <- matrix(NA, nrow=nT, ncol=Sim)       # 週ごとの個体数と漁獲率の変化
   log_r <- pars$log_r        # 増加率の対数値のパラメータ
-  pars[,b_type] <- transform_b(pars, b_max, b_min)
-  b <- make_b(pars[,b_type])
-  sigma <- exp(pars$log_sigma)
-  eps <- matrix(rnorm(nY*Sim,0,sigma),nrow=nY,ncol=Sim,byrow=TRUE)
+  pars[,b_type] <- transform_b(pars, b_max, b_min)        # 大きすぎる/小さすぎるlogit_bを制約
+  b <- make_b(pars[,b_type])          # logit_bをbに変換
+  sigma <- exp(pars$log_sigma)       # 個体群変動誤差
+  eps <- matrix(rnorm(nY*Sim,0,sigma),nrow=nY,ncol=Sim,byrow=TRUE)         # 各年各シミュレーションの誤差
+  YEAR <- dat$YEAR+1         # 年
+  START <- dat$START         # 漁獲開始時を示すダミー変数
+  END <- dat$END         # 漁獲終了時を示すダミー変数
+  U <- summary(sdrep)[rownames(summary(sdrep))=="U",]          # 漁獲率
+  logit_U <- cbind(logit(U[,1]), (1/(U[,1]*(1-U[,1])))*U[,2])         # 漁獲率とその標準誤差をロジット変換
+  Umsy <- make_Umsy(log_r,b)        # U_msyを計算
+  set.seed(seed0)         # 乱数のseedを設定
+  
+  for (i in 1:nT){
+      u[i,] <- ilogit(rnorm(Sim, logit_U[i,1], logit_U[i,2]))       # 漁獲率をランダムに生成
+      if (START[i]==1) {
+        if (i==1) n0[YEAR[i],] <- pars$tilde_n0 else n0[YEAR[i],] <- pop_update(cbind(log_r,b),n_last[YEAR[i]-1,],eps[YEAR[i]-1,])        # 漁獲開始時の個体数
+        n[i,] <- n0[YEAR[i],]       # 漁獲開始時の個体数をコピー
+      }
+      if (START[i]==0) n[i,] <- n[i-1,]+log(1-u[i-1,])       # 漁獲開始時以降，個体数から漁獲量を間引いていく
+      if (END[i]==1) n_last[YEAR[i],] <- n[i,]+log(1-u[i,])        # 漁獲終了時の個体数
+  }
+  n0_new <- pop_update(cbind(log_r,b),n_last[nY,],eps[nY,])        # データの最終年の翌年の最初の個体数予測値
+  list(parms=pars, Umsy=Umsy, n0=n0, n_last=n_last, n0_new=n0_new, n=n, u=u)       # 結果のアウトプット
+}
+pops <- Pop_simulator(gen_par, sdrep, dat_ss)        # 個体群モデルの試算
+
+mean_n0 <- rowMeans(pops$n0)       # 各年の平均個体数推定値（シミュレーションで生成されたものを平均したもの）
+ci_n0 <- apply(pops$n0, 1, quantile, probs=c(0.025, 0.975))       # 信頼区間の下限値と上限値を計算
+est_n0 <- summary(sdrep)[rownames(summary(sdrep))=="n0",1]        # もとの推定モデルから得られた初期個体数の対数値（シミュレーションの真値にあたる）
+dat1 <- data.frame(Year=unique(delury$Year), n0=mean_n0, lo=ci_n0[1,], up=ci_n0[2,], est_n0=est_n0)       # シミュレーションによって得られた初期個体数とモデルの推定値を比較するためのデータ
+ggplot(dat1, aes(x=Year, y=n0))+geom_ribbon(aes(ymin=lo, ymax=up),alpha=0.2) + labs(y="log Population Size")+geom_line(color="blue",linewidth=1.2)+geom_point(aes(y=est_n0))        # シミュレーションとモデル推定値の比較
+
+mean_n0_old <- mean_n0      # 上で計算したシミュレーションの平均対数個体数推定値をとっておく
+set.seed(1)      # 乱数のseed設定
+Sim <- 1000       # シミュレーション回数
+gen_par <- rmvnorm(Sim, mu_p, Sigma_p)       # パラメータ生成
+
+pops <- Pop_simulator(gen_par, sdrep, dat_ss)         # 個体群モデルを走らせる
+n <- dat_ss$Y         # 年数
+se_n0 <- summary(sdrep)[rownames(summary(sdrep))=="n0",2]        # 初期個体数の対数値の標準誤差
+
+W <- sapply(1:Sim, function(i) 1/n*sum(dnorm(pops$n0[,i],est_n0,se_n0,log=TRUE)))       # シミュレーション結果がモデル推定値とあっているかどうかを測る平均対数尤度を計算（シミュレーションデータの重みとなる）
+W <- W-max(W)        # 最大重みが0でそれ以外は負になるように調整
+P <- exp(W)/sum(exp(W))        # （相対）重みの計算
+
+id <- sample(Sim,0.1*Sim,prob=P)         # 上で計算した相対重みを使って，シミュレーションデータから10%を抽出
+
+mean_n0_new <- rowMeans(pops$n0[,id])        # 重みで抽出された個体数の対数値の平均値
+ci_n0_new <- apply(pops$n0[,id], 1, quantile, probs=c(0.025, 0.975))        # 重み付き抽出の対数個体数推定値の信頼区間
+
+dat2 <- data.frame(Year=unique(delury$Year), n0=mean_n0_new, lo=ci_n0_new[1,], up=ci_n0_new[2,], est_n0=est_n0, old_n0=mean_n0_old)        # 重み付き推定値と素の（重みなしの）推定値を一緒にしたデータセット
+
+ggplot(dat2, aes(x=Year, y=n0))+geom_ribbon(aes(ymin=lo, ymax=up),alpha=0.2)+labs(y="log Population Size")+geom_line(aes(y=old_n0),color="green",linetype="dashed",linewidth=1.2)+geom_line(color="blue",linewidth=1.2)+geom_point(aes(y=est_n0))+theme_bw()       # 重み付き推定値と重みなしの推定値の比較プロット
+
+mean_n_last <- rowMeans(pops$n_last[,id])        #
+ci_n_last <- apply(pops$n_last[,id], 1, quantile, probs=c(0.025, 0.975))
+est_n_last <- log(summary(sdrep)[rownames(summary(sdrep))=="N_E",1])
+dat3 <- data.frame(Year=unique(delury$Year), n_last=mean_n_last, lo=ci_n_last[1,], up=ci_n_last[2,], est_n_last=est_n_last)
+
+ggplot(dat3, aes(x=Year, y=n_last))+geom_ribbon(aes(ymin=lo, ymax=up),alpha=0.2) + labs(y="log Population Size")+geom_line(color="blue",linewidth=1.2)+geom_point(aes(y=est_n_last))
+
+Simulated_data <- function(dat, sdrep, Sim=1000, p=0.1, seed0=1, b_max=0.95, b_min=0.05, b_type="logit_b"){
+  set.seed(seed0)
   YEAR <- dat$YEAR+1
   START <- dat$START
   END <- dat$END
-  U <- summary(sdrep)[rownames(summary(sdrep))=="U",]
-  logit_U <- cbind(logit(U[,1]), (1/(U[,1]*(1-U[,1])))*U[,2])
-  Umsy <- make_Umsy(log_r,b)
-  set.seed(seed0)
   
-  for (i in 1:nT){
-      u[i,] <- ilogit(rnorm(Sim, logit_U[i,1], logit_U[i,2]))
-      if (START[i]==1) {
-        if (i==1) n0[YEAR[i],] <- pars$tilde_n0 else n0[YEAR[i],] <- pop_update(cbind(log_r,b),n_last[YEAR[i]-1,],eps[YEAR[i]-1,])
-        n[i,] <- n0[YEAR[i],]
-      }
-      if (START[i]==0) n[i,] <- n[i-1,]+log(1-u[i-1,])
-      if (END[i]==1) n_last[YEAR[i],] <- n[i,]+log(1-u[i,])
-  }
-  n0_new <- pop_update(cbind(log_r,b),n_last[nY,],eps[nY,])
-  list(parms=pars, Umsy=Umsy, n0=n0, n_last=n_last, n0_new=n0_new, n=n, u=u)
-}
-pops <- Pop_simulator(gen_par, sdrep, dat_ss)
+  mu_p <- sdrep$par.fixed
+  Sigma_p <- sdrep$cov.fixed
 
+  gen_par <- rmvnorm(Sim, mu_p, Sigma_p)
+  pops <- Pop_simulator(gen_par, sdrep, dat, seed0, b_max, b_min, b_type)
+  gen_par <- pops$parms
+  nY <- dat$Y
+  est_n0 <- summary(sdrep)[rownames(summary(sdrep))=="n0",]
+  Umsy <- pops$Umsy
+  
+  W <- sapply(1:Sim, function(i) 1/nY*sum(dnorm(pops$n0[,i],est_n0[,1],est_n0[,2],log=TRUE)))
+  W <- W-max(W)
+  P <- exp(W)/sum(exp(W))
+  m <- round(p*Sim)
+  id <- sample(Sim,m,prob=P)
+  nt <- length(dat$CPUE)
+  
+  parms <- gen_par[id,]
+  n <- pops$n[,id]
+  u <- pops$u[,id]
+  Umsy <- pops$Umsy[id]
+  n0 <- pops$n0[,id]
+  n_last <- pops$n_last[,id]
+  n0_new <- pops$n0_new[id]
+  
+  catch <- exp(n)*u
+    
+  log_tilde_q <- parms[,"log_tilde_q"]
+  tau <- exp(parms[,"log_tau"])
+  eta <- exp(parms[,"log_eta"])
+  z <- matrix(rnorm(nt*m), nrow=nt, ncol=m)
+  z2 <- matrix(rnorm(nY*m), nrow=nY, ncol=m)
+  log_cpue <- matrix(NA, nrow=nt, ncol=m)
+  log_q <- matrix(NA, nrow=nY, ncol=m)
+  log_q[1,] <- rnorm(m, log_tilde_q, eta)
+  
+  for (i in 1:nt){
+    if (i>1 & START[i]==1) log_q[YEAR[i],] <- log_q[YEAR[i]-1,]+eta*z2[YEAR[i]-1,]
+    log_cpue[i,] <- log_q[YEAR[i],]+n[i,]+tau*z[i,]
+  }
+  
+  tcat <- sapply(1:m, function(i) tapply(catch[,i], YEAR, sum))
+  
+  list(m=m, parms=parms, Umsy=Umsy, YEAR=YEAR-1, START=START, END=END, n0=n0, n_last=n_last, n0_new=n0_new, n=n, u=u, cpue=exp(log_cpue), catch=catch, tcat=tcat, q=exp(log_q))
+}
+Sim_dat <- Simulated_data(dat_ss, sdrep)
+
+compile("delury_ss.cpp")
+dyn.load(dynlib("delury_ss"))
+
+make_dat <- function(x,i){
+  list(CPUE=x$cpue[,i], CAT=x$catch[,i], YEAR=x$YEAR, START=as.numeric(x$START), END=as.numeric(x$END), Y=nrow(x$n0))
+}
+make_par <- function(x,i,b_max,b_min,b_fix,b_ini){
+  list(log_r=x$parms[i,1]-0.1,
+       logit_b=ifelse(b_fix, logit(b_ini), max(min(x$parms[i,2],logit(b_max)-0.2),logit(b_min)+0.2)),
+        tilde_n0=x$parms[i,3]+0.2,
+        log_tilde_q=x$parms[i,4]-0.1,
+        log_sigma=x$parms[i,5],
+        log_tau=x$parms[i,6],
+        log_eta=x$parms[i,7],
+        log_q=log(x$q[,i])-0.5,
+        n0=x$n0[,i]+0.5
+      )
+}
+sim2est <- function(Sim_dat,b_max=0.95,b_min=0.05,b_fix=FALSE,b_ini=0.8,filename="delury_ss",lo=c(-10,logit(b_min),rep(-10,5)),up=c(10,logit(b_max),rep(10,5))){
+  Res_sim <- list()
+  m <- Sim_dat$m
+  last_n <- last(Sim_dat$n)
+  maps <- NULL
+  if (b_fix) {
+    maps$logit_b <- factor(NA)
+    lo <- lo[-2]
+    up <- up[-2]
+  }
+  
+  for (i in 1:m){
+    if (exp(last_n[i]) > 0){
+      dat_sim <- make_dat(Sim_dat,i)
+      par_sim <- make_par(Sim_dat,i,b_max,b_min,b_fix,b_ini)
+      obj_sim <- MakeADFun(dat_sim, par_sim, map=maps, random=c("log_q","n0"), DLL=filename, silent=TRUE)
+      mod_sim <- nlminb(obj_sim$par, obj_sim$fn, obj_sim$gr, lower=lo, upper=up)
+      sdrep_sim <- sdreport(obj_sim)
+      Res_sim[[i]] <- list(b_fix=b_fix,b_ini=b_ini,obj=obj_sim,mod=mod_sim,sdrep=sdrep_sim)
+    } else {
+      temp1 <- matrix(0, nrow=4, ncol=2)
+      rownames(temp1) <- c("b","N0_new","log_r","q")
+      temp1[4,1] <- 0.000001
+      colnames(temp1) <- c("Estimate","Std. Error")
+      Res_sim[[i]] <- list(b_fix=b_fix,b_ini=b_ini,sdrep=temp1)
+    }
+  }
+  return(Res_sim)
+}
+Res_sim <- sim2est(Sim_dat)
+
+Bias_plot <- function(res,dat,main="密度効果推定"){
+  m <- dat$m
+  Umsy_est <- logit(as.numeric(sapply(1:m, function(i) summary(res[[i]]$sdrep)[rownames(summary(res[[i]]$sdrep))=="Umsy",1])))
+  Umsy_true <- logit(as.numeric(dat$Umsy))
+  Umsy_bias <- Umsy_est-Umsy_true
+
+  N0_new_est <- log(as.numeric(sapply(1:m, function(i) summary(res[[i]]$sdrep)[rownames(summary(res[[i]]$sdrep))=="N0_new",1])))
+  N0_new_true <- dat$n0_new
+  N0_new_bias <- N0_new_est-N0_new_true
+
+  dat_rb <- data.frame(Bias=c(Umsy_bias, N0_new_bias),Type=factor(c(rep("Umsy (logit)",m),rep("N0_new (log)",m)),levels=c("Umsy (logit)","N0_new (log)")))
+
+  mB <- dat_rb %>% group_by(Type) %>% summarize(mB=mean(Bias))
+
+  p1 <- ggplot(dat_rb, aes(x=Type,y=Bias,fill=Type))+geom_boxplot()+theme_bw()+annotate("text", x = c(1,2), y = c(3,3), label = c(round(mean(Umsy_bias),2), round(mean(N0_new_bias),2)), color="blue", size=5, fontface="bold")+ggtitle(main)
+
+  print(p1)
+  return(mB$mB)
+}
+mB <- Bias_plot(Res_sim, Sim_dat)
+
+Res_sim1 <- sim2est(Sim_dat, b_fix=TRUE, b_ini=0.8)
+mB1 <- Bias_plot(Res_sim1, Sim_dat, main="密度効果固定")
+
+## 8 - 2 シミュレーションで将来予測してみよう！
+
+make_sigma <- function(Res){
+  m <- length(Res)
+  Umsy <- sapply(1:m, function(i) summary(Res[[i]]$sdrep)[rownames(summary(Res[[i]]$sdrep))=="Umsy",1])
+  sigma_Umsy <- mean(sapply(1:m, function(i) summary(Res[[i]]$sdrep)[rownames(summary(Res[[i]]$sdrep))=="Umsy",2])/(Umsy*(1-Umsy)),na.rm=TRUE)
+  sigma_n0_new <- mean(sapply(1:m, function(i) summary(Res[[i]]$sdrep)[rownames(summary(Res[[i]]$sdrep))=="N0_new",2])/sapply(1:m, function(i) summary(Res[[i]]$sdrep)[rownames(summary(Res[[i]]$sdrep))=="N0_new",1]),na.rm=TRUE)
+  c(sigma_Umsy, sigma_n0_new)
+}
+Future_Sim <- function(Sim_dat, Res_sim, FY=20, Strategy="true", beta=1.0, scale_tau=1, max_u=0.95, min_u=0.05, bias=c(0,0), seed0=1){
+  set.seed(seed0)
+  m <- Sim_dat$m
+  parms <- Sim_dat$parms
+  
+  log_r <- parms[,"log_r"]
+  if (names(parms)[2]=="logit_b") b <- 1/(1+exp(-parms[,2])) else b <- exp(parms[,2])
+  
+  Umsy <- Sim_dat$Umsy
+  sigma <- exp(parms[,"log_sigma"])
+  
+  period <- sample(as.numeric(table(Sim_dat$YEAR)),FY,replace=TRUE)
+  
+  U <- surv <- Cat <- Num <- matrix(NA, nrow=sum(period), ncol=m)
+  
+  sigmas <- make_sigma(Res_sim)
+  Umsy_fixed <- Res_sim[[1]]$b_fix
+  Umsy_ini <- as.numeric(Res_sim[[1]]$b_ini)
+  
+  eps <- matrix(rnorm(FY*m,0,sigma),nrow=FY,ncol=m,byrow=TRUE)
+
+  cp <- c(1,cumsum(period))
+  cp[1] <- 0
+  
+  for (j in 1:FY){
+    if (Strategy=="true"){
+      U0 <- pmin(as.numeric(ifelse(exp(last(Sim_dat$n)) > 0, beta*pmax(pmin(Umsy,max_u),min_u), 0.00001)),1)
+      Tcat <- U0*as.numeric(ifelse(exp(last(Sim_dat$n)) > 0, exp(Sim_dat$n0_new), 0))
+    }
+    if (Strategy=="est"){
+      if (Umsy_fixed) U0 <- pmax(pmin(beta*Umsy_ini,max_u),min_u) else U0 <- pmin(as.numeric(ifelse(exp(last(Sim_dat$n)) > 0, pmax(pmin(beta*ilogit(rnorm(m,logit(Umsy)+bias[1],sigmas[1])),max_u),min_u),0.00001)),1)
+      N0_new_est <- as.numeric(ifelse(exp(last(Sim_dat$n)) > 0,exp(rnorm(m,Sim_dat$n0_new+bias[2],sigmas[2])),0))
+      Tcat <- U0*N0_new_est
+    }
+    nr <- cp[j+1]-cp[j]
+    U[(cp[j]+1):cp[j+1],] <- matrix(1-(1-U0)^(1/period[j]),nrow=nr,ncol=m,byrow=TRUE)
+    surv[(cp[j]+1):cp[j+1],] <- (1-U[(cp[j]+1):cp[j+1],])^(0:(period[j]-1))
+    US <- U[(cp[j]+1):cp[j+1],]*surv[(cp[j]+1):cp[j+1],]
+
+    cats <- sapply(1:m, function(i) rmultinom(1,round(Tcat[i]),US[,i]))
+    Cat[(cp[j]+1):cp[j+1],] <- cats
+    ccats <- rbind(0,apply(cats,2,cumsum))
+     
+    real_N0 <- matrix(exp(Sim_dat$n0_new),nrow=nr+1,ncol=m,byrow=TRUE)
+    real_N <- real_N0-ccats
+    real_N[real_N < 0] <- 0
+    real_Catch <- ifelse(ccats[2:(nr+1),] > real_N0[2:(nr+1),], real_N[1:nr,], cats)
+
+    n0_new <- pop_update(cbind(log_r,b), log(real_N[nr+1,]), eps[j,])
+
+    tau <- exp(parms[,"log_tau"])
+    eta <- exp(parms[,"log_eta"])
+    z <- matrix(rnorm(nr*m), nrow=nr, ncol=m)
+    z2 <- rnorm(m)
+    log_cpue <- matrix(NA, nrow=nr, ncol=m)
+    log_q <- log(last(Sim_dat$q))+eta*z2
+  
+    for (i in 1:nr){
+      log_cpue[i,] <- log_q+log(real_N[i,])+scale_tau*tau*z[i,]
+    }
+    
+    Sim_dat$YEAR <- c(Sim_dat$YEAR, rep(last(Sim_dat$YEAR)+1,nr))
+    Sim_dat$START <- c(Sim_dat$START, c(1,rep(0,nr-1)))
+    Sim_dat$END <- c(Sim_dat$END, c(rep(0,nr-1),1))
+    Sim_dat$n0 <- rbind(Sim_dat$n0, Sim_dat$n0_new)
+    Sim_dat$n_last <- rbind(Sim_dat$n_last, log(real_N[nr+1,]))
+    Sim_dat$n0_new <- n0_new
+    Sim_dat$n <- rbind(Sim_dat$n, log(real_N[1:nr,]))
+    Sim_dat$u <- rbind(Sim_dat$u, real_Catch/real_N[1:nr,])
+    Sim_dat$cpue <- rbind(Sim_dat$cpue, exp(log_cpue))
+    Sim_dat$catch <- rbind(Sim_dat$catch, real_Catch)
+    Sim_dat$tcat <- rbind(Sim_dat$tcat, Tcat)
+    Sim_dat$q <- rbind(Sim_dat$q, exp(log_q))
+  }
+  
+  Sim_dat$tcat <- sapply(1:m, function(i) tapply(Sim_dat$catch[,i], Sim_dat$YEAR, sum))
+  Sim_dat$bias <- bias
+  Sim_dat$sigmas <- sigmas
+    
+  return(Sim_dat)
+}
+
+tib_pr_opt <- list("tibble.print_max" = 20)
+options(tib_pr_opt)
+b_true <- ilogit(Sim_dat$parms[,"logit_b"])
+log_r_true <- Sim_dat$parms[,"log_r"]
+Neq_true <- exp((log_r_true+(1-b_true)*log(1-b_true))/b_true)
+Base_Stat <- data.frame(
+  MSY=b_true*Neq_true,
+  Nmsy=Neq_true
+)
+Res_Fut_Sim <- list()
+beta_range <- seq(0.1,1.2,by=0.1)
+Sim_Stat <- NULL
+for (i in 1:length(beta_range)){
+  Res_Fut_Sim[[i]] <- Future_Sim(Sim_dat, Res_sim, Strategy="true", beta=beta_range[i], FY=100) 
+  sim_stat <- data.frame(beta=beta_range[i], Catch=as.numeric(last(Res_Fut_Sim[[i]]$tcat)), N=as.numeric(last(exp(Res_Fut_Sim[[i]]$n0))))
+  sim_stat <- sim_stat %>% mutate(RC=Catch/Base_Stat$MSY, RN=N/Base_Stat$Nmsy)
+  Sim_Stat <- rbind(Sim_Stat,sim_stat)
+  }
+( Table_1 <- Sim_Stat %>% group_by(beta) %>% summarize(mRC=mean(RC), mRN=mean(RN), pE=mean(RN==0)) )
+
+Res_Fut_Sim1_0 <- list()
+beta_range <- seq(0.1,1.2,by=0.1)
+Sim_Stat1_0 <- NULL
+for (i in 1:length(beta_range)){
+  Res_Fut_Sim1_0[[i]] <- Future_Sim(Sim_dat, Res_sim, Strategy="est", beta=beta_range[i], bias=mB, FY=100) 
+  sim_stat1_0 <- data.frame(beta=beta_range[i], Catch=as.numeric(last(Res_Fut_Sim1_0[[i]]$tcat)), N=as.numeric(last(exp(Res_Fut_Sim1_0[[i]]$n0))))
+  sim_stat1_0 <- sim_stat1_0 %>% mutate(RC=Catch/Base_Stat$MSY, RN=N/Base_Stat$Nmsy)
+  Sim_Stat1_0 <- rbind(Sim_Stat1_0,sim_stat1_0)
+  }
+( Table_2 <- Sim_Stat1_0 %>% group_by(beta) %>% summarize(mRC=mean(RC), mRN=mean(RN), pE=mean(RN==0)) )
+
+Res_Fut_Sim1_1 <- list()
+beta_range <- seq(0.1,1.2,by=0.1)
+Sim_Stat1_1 <- NULL
+for (i in 1:length(beta_range)){
+  Res_Fut_Sim1_1[[i]] <- Future_Sim(Sim_dat, Res_sim1, Strategy="est", beta=beta_range[i], bias=mB1, FY=100) 
+  sim_stat1_1 <- data.frame(beta=beta_range[i], Catch=as.numeric(last(Res_Fut_Sim1_1[[i]]$tcat)), N=as.numeric(last(exp(Res_Fut_Sim1_1[[i]]$n0))))
+  sim_stat1_1 <- sim_stat1_1 %>% mutate(RC=Catch/Base_Stat$MSY, RN=N/Base_Stat$Nmsy)
+  Sim_Stat1_1 <- rbind(Sim_Stat1_1,sim_stat1_1)
+  }
+( Table_3 <- Sim_Stat1_1 %>% group_by(beta) %>% summarize(mRC=mean(RC), mRN=mean(RN), pE=mean(RN==0)) )
+
+years <- unique(delury$Year)
+i <- 7
+mcat <- apply(Res_Fut_Sim1_1[[i]]$tcat,1,median)
+lcat <- apply(Res_Fut_Sim1_1[[i]]$tcat, 1, quantile, prob=0.025)
+ucat <-  apply(Res_Fut_Sim1_1[[i]]$tcat, 1, quantile, prob=0.975)
+mN0 <- rowMeans(exp(Res_Fut_Sim1_1[[i]]$n0))
+
+dat_f1 <- data.frame(Year=c(years, last(years)+1:100), mcat=mcat, mN0=mN0, lcat=lcat, ucat=ucat)
+
+ggplot(dat_f1, aes(x=Year, y=mcat))+geom_ribbon(aes(ymin=lcat, ymax=ucat),alpha=0.2) + labs(y="Catch / Population Size") + geom_line() + geom_line(aes(x=Year, y=mN0), col="blue", linetype="dashed") + scale_y_log10() + theme_bw()
+
+## 8 - 3 さまざまな不確実性をシミュレーションの中に入れよう！
+
+prog  <- readLines("delury_ss.cpp")
+prog[21] <- "  PARAMETER(log_b);"
+prog[32] <- "  Type b = exp(log_b);"
+prog[77] <- "  nll += -dnorm(n0(0),tilde_n0,log_b*sigma,true);"
+prog[79] <- "    nll += -dnorm(n0(i),log_r+n_last(i-1)+log(Type(1.0)-n_last(i-1)/log_b),sigma,true);"
+prog[83] <- "  Type Umsy = r/(r+log_b);"
+prog[84] <- "  Type N_eq = b/(1-Umsy)*exp(-log_b/(r*(1-Umsy)));"
+prog[86] <- "  Type N0_new = exp(log_r+n_last(Y-1)+log(Type(1.0)-n_last(Y-1)/log_b));" 
+writeLines(prog, con = "delury_ss2.cpp")
+
+library(TMB)
+compile("delury_ss2.cpp")
+dyn.load(dynlib("delury_ss2"))
+
+dat_ss2 <- dat_ss
+par_ss2 <- list(
+  log_r=log(4),
+  log_b=log(3000),
+  tilde_n0=mean(par_ss$n0)+0.5,
+  log_tilde_q=mean(par_ss$log_q)-0.5,
+  log_sigma=sdrep$par.fixed["log_sigma"],
+  log_tau=sdrep$par.fixed["log_tau"],
+  log_eta=sdrep$par.fixed["log_eta"],
+  log_q=par_ss$log_q-0.5,
+  n0=par_ss$n0+0.5
+)
+obj2 <- MakeADFun(dat_ss2, par_ss2, random=c("log_q","n0"), DLL="delury_ss2", silent=TRUE)
+mod_ss2 <- nlminb(obj2$par, obj2$fn, obj2$gr)
+sdrep2 <- sdreport(obj2)
+
+pop_update <- function(p,x,eps) p[,1]+x+log(1-pmin(pmax(x,-1e6)/log(p[,2]),0.999))+eps
+transform_b <- function(pars, b_max, b_min){
+  log_b <- ifelse(pars$log_b < log(b_min), log(b_min),  ifelse(pars$log_b > log(b_max), log(b_max), pars$log_b))
+  return(log_b)
+}
+make_b <- function(x) exp(x)
+make_Umsy <- function(x,y) exp(x)/(exp(x)+log(y))
+Sim_dat2 <- Simulated_data(dat_ss, sdrep2, b_max=exp(6.7), b_min=exp(5.7), b_type="log_b")
+
+Res_sim2_0 <- sim2est(Sim_dat2)
+Res_sim2_1 <- sim2est(Sim_dat2,b_fix=TRUE,b_ini=0.8)
+mB2 <- Bias_plot(Res_sim2_0, Sim_dat2)
+mB3 <- Bias_plot(Res_sim2_1, Sim_dat2, main="密度効果固定")
+
+b_true <- exp(Sim_dat2$parms[,"log_b"])
+log_r_true <- Sim_dat2$parms[,"log_r"]
+Umsy_true <-  exp(log_r_true)/(exp(log_r_true)+log(b_true))
+Neq_true <- b_true/(1-Umsy_true)*exp(-log(b_true)/(exp(log_r_true)*(1-Umsy_true)))
+Base_Stat2 <- data.frame(
+  MSY=Umsy_true*Neq_true,
+  Nmsy=Neq_true
+)
+Res_Fut_Sim2_0 <- list()
+beta_range <- seq(0.1,1.2,by=0.1)
+Sim_Stat2_0 <- NULL
+for (i in 1:length(beta_range)){
+  Res_Fut_Sim2_0[[i]] <- Future_Sim(Sim_dat2, Res_sim2_0, Strategy="est", beta=beta_range[i], bias=mB2, FY=100) 
+  sim_stat2_0 <- data.frame(beta=beta_range[i], Catch=as.numeric(last(Res_Fut_Sim2_0[[i]]$tcat)), N=as.numeric(last(exp(Res_Fut_Sim2_0[[i]]$n0))))
+  sim_stat2_0 <- sim_stat2_0 %>% mutate(RC=Catch/Base_Stat2$MSY, RN=N/Base_Stat2$Nmsy)
+  Sim_Stat2_0 <- rbind(Sim_Stat2_0,sim_stat2_0)
+  }
+( Table_3 <- Sim_Stat2_0 %>% group_by(beta) %>% summarize(mRC=mean(RC), mRN=mean(RN), pE=mean(RN==0)) )
+
+Res_Fut_Sim2_1 <- list()
+beta_range <- seq(0.1,1.2,by=0.1)
+Sim_Stat2_1 <- NULL
+for (i in 1:length(beta_range)){
+  Res_Fut_Sim2_1[[i]] <- Future_Sim(Sim_dat2, Res_sim2_1, Strategy="est", beta=beta_range[i], bias=mB3, FY=100) 
+  sim_stat2_1 <- data.frame(beta=beta_range[i], Catch=as.numeric(last(Res_Fut_Sim2_1[[i]]$tcat)), N=as.numeric(last(exp(Res_Fut_Sim2_1[[i]]$n0))))
+  sim_stat2_1 <- sim_stat2_1 %>% mutate(RC=Catch/Base_Stat2$MSY, RN=N/Base_Stat2$Nmsy)
+  Sim_Stat2_1 <- rbind(Sim_Stat2_1, sim_stat2_1)
+  }
+( Table_4 <- Sim_Stat2_1 %>% group_by(beta) %>% summarize(mRC=mean(RC), mRN=mean(RN), pE=mean(RN==0)) )
 
