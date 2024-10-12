@@ -55,8 +55,8 @@ Pop_simulator <- function(parms, sdrep, dat, seed0=1, b_max=0.95, b_min=0.05, b_
 }
 pops <- Pop_simulator(gen_par, sdrep, dat_ss)        # 個体群モデルの試算
 
-mean_n0 <- rowMeans(pops$n0)       # 各年の平均個体数推定値（シミュレーションで生成されたものを平均したもの）
-ci_n0 <- apply(pops$n0, 1, quantile, probs=c(0.025, 0.975))       # 信頼区間の下限値と上限値を計算
+mean_n0 <- rowMeans(pops$n0)       # 各年の平均個体数（対数）推定値（シミュレーションで生成されたものを平均したもの）
+ci_n0 <- apply(pops$n0, 1, quantile, probs=c(0.025, 0.975))       # シミュレーションの初期個体数対数値の信頼区間の下限値と上限値を計算
 est_n0 <- summary(sdrep)[rownames(summary(sdrep))=="n0",1]        # もとの推定モデルから得られた初期個体数の対数値（シミュレーションの真値にあたる）
 dat1 <- data.frame(Year=unique(delury$Year), n0=mean_n0, lo=ci_n0[1,], up=ci_n0[2,], est_n0=est_n0)       # シミュレーションによって得られた初期個体数とモデルの推定値を比較するためのデータ
 ggplot(dat1, aes(x=Year, y=n0))+geom_ribbon(aes(ymin=lo, ymax=up),alpha=0.2) + labs(y="log Population Size")+geom_line(color="blue",linewidth=1.2)+geom_point(aes(y=est_n0))        # シミュレーションとモデル推定値の比較
@@ -83,14 +83,13 @@ dat2 <- data.frame(Year=unique(delury$Year), n0=mean_n0_new, lo=ci_n0_new[1,], u
 
 ggplot(dat2, aes(x=Year, y=n0))+geom_ribbon(aes(ymin=lo, ymax=up),alpha=0.2)+labs(y="log Population Size")+geom_line(aes(y=old_n0),color="green",linetype="dashed",linewidth=1.2)+geom_line(color="blue",linewidth=1.2)+geom_point(aes(y=est_n0))+theme_bw()       # 重み付き推定値と重みなしの推定値の比較プロット
 
-mean_n_last <- rowMeans(pops$n_last[,id])        #
-ci_n_last <- apply(pops$n_last[,id], 1, quantile, probs=c(0.025, 0.975))
-est_n_last <- log(summary(sdrep)[rownames(summary(sdrep))=="N_E",1])
-dat3 <- data.frame(Year=unique(delury$Year), n_last=mean_n_last, lo=ci_n_last[1,], up=ci_n_last[2,], est_n_last=est_n_last)
+mean_n_last <- rowMeans(pops$n_last[,id])        # シミュレーションによる漁獲後の対数個体数の平均
+ci_n_last <- apply(pops$n_last[,id], 1, quantile, probs=c(0.025, 0.975))       # シミュレーションによる漁獲後の対数個体数の信頼区間
+est_n_last <- log(summary(sdrep)[rownames(summary(sdrep))=="N_E",1])       # 元のモデルで推定された漁獲後の対数個体数推定値
+dat3 <- data.frame(Year=unique(delury$Year), n_last=mean_n_last, lo=ci_n_last[1,], up=ci_n_last[2,], est_n_last=est_n_last)       # 元のとシミュレーションによる漁獲後の個体数の対数値の比較のためのデータ
+ggplot(dat3, aes(x=Year, y=n_last))+geom_ribbon(aes(ymin=lo, ymax=up), alpha=0.2) + labs(y="log Population Size")+geom_line(color="blue", linewidth=1.2)+geom_point(aes(y=est_n_last))          # 元のとシミュレーションによる漁獲後の個体数の対数値の比較プロット
 
-ggplot(dat3, aes(x=Year, y=n_last))+geom_ribbon(aes(ymin=lo, ymax=up),alpha=0.2) + labs(y="log Population Size")+geom_line(color="blue",linewidth=1.2)+geom_point(aes(y=est_n_last))
-
-Simulated_data <- function(dat, sdrep, Sim=1000, p=0.1, seed0=1, b_max=0.95, b_min=0.05, b_type="logit_b"){
+Simulated_data <- function(dat, sdrep, Sim=1000, p=0.1, seed0=1, b_max=0.95, b_min=0.05, b_type="logit_b"){        # シミュレーションデータを作成するプログラム
   set.seed(seed0)
   YEAR <- dat$YEAR+1
   START <- dat$START
