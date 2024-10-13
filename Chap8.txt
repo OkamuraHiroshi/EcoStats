@@ -104,12 +104,12 @@ Simulated_data <- function(dat, sdrep, Sim=1000, p=0.1, seed0=1, b_max=0.95, b_m
   est_n0 <- summary(sdrep)[rownames(summary(sdrep))=="n0",]        # 初期個体数対数値の推定値
   Umsy <- pops$Umsy        # MSYの漁獲率
   
-  W <- sapply(1:Sim, function(i) 1/nY*sum(dnorm(pops$n0[,i],est_n0[,1],est_n0[,2],log=TRUE)))
-  W <- W-max(W)
-  P <- exp(W)/sum(exp(W))
-  m <- round(p*Sim)
-  id <- sample(Sim,m,prob=P)
-  nt <- length(dat$CPUE)
+  W <- sapply(1:Sim, function(i) 1/nY*sum(dnorm(pops$n0[,i],est_n0[,1],est_n0[,2],log=TRUE)))       # 元の個体数の対数値とのあてはまり（平均対数尤度）によってシミュレーションデータの重みを決定
+  W <- W-max(W)         # 最大値を引いてオーバーフローを回避
+  P <- exp(W)/sum(exp(W))         # 指数をとって必ず正値になるようにして，相対重みを計算
+  m <- round(p*Sim)        # シミュレーションのうちp割を抽出する
+  id <- sample(Sim,m,prob=P)         # 抽出するものの番号を決定．重みを上の相対重みにする
+  nt <- length(dat$CPUE)         # CPUE時系列の長さ（サンプルサイズ）
   
   parms <- gen_par[id,]
   n <- pops$n[,id]
