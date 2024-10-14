@@ -172,10 +172,10 @@ sim2est <- function(Sim_dat,b_max=0.95,b_min=0.05,b_fix=FALSE,b_ini=0.8,filename
   
   for (i in 1:m){
     if (exp(last_n[i]) > 0){
-      dat_sim <- make_dat(Sim_dat,i)
-      par_sim <- make_par(Sim_dat,i,b_max,b_min,b_fix,b_ini)
-      obj_sim <- MakeADFun(dat_sim, par_sim, map=maps, random=c("log_q","n0"), DLL=filename, silent=TRUE)
-      mod_sim <- nlminb(obj_sim$par, obj_sim$fn, obj_sim$gr, lower=lo, upper=up)
+      dat_sim <- make_dat(Sim_dat,i)      # i番目のシミュレーションデータを抽出してTMB用に変換
+      par_sim <- make_par(Sim_dat,i,b_max,b_min,b_fix,b_ini)       # i番目のシミュレーションのパラメータ値を抽出してTMBの初期値とする
+      obj_sim <- MakeADFun(dat_sim, par_sim, map=maps, random=c("log_q","n0"), DLL=filename, silent=TRUE)       # 自動微分による勾配関数を作成する
+      mod_sim <- nlminb(obj_sim$par, obj_sim$fn, obj_sim$gr, lower=lo, upper=up)      # TMBで作られた目的関数や勾配関数を与えて最適化
       sdrep_sim <- sdreport(obj_sim)
       Res_sim[[i]] <- list(b_fix=b_fix,b_ini=b_ini,obj=obj_sim,mod=mod_sim,sdrep=sdrep_sim)
     } else {
