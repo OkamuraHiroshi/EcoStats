@@ -148,9 +148,9 @@ make_dat <- function(x,i){       # シミュレーションデータからTMB用
   list(CPUE=x$cpue[,i], CAT=x$catch[,i], YEAR=x$YEAR, START=as.numeric(x$START), END=as.numeric(x$END), Y=nrow(x$n0))       # TMB実行の際に必要となる形式のデータセット
 }
 make_par <- function(x,i,b_max,b_min,b_fix,b_ini){         # TMB用のパラメータの初期値を作成する関数
-  list(log_r=x$parms[i,1]-0.1,
-       logit_b=ifelse(b_fix, logit(b_ini), max(min(x$parms[i,2],logit(b_max)-0.2),logit(b_min)+0.2)),
-        tilde_n0=x$parms[i,3]+0.2,
+  list(log_r=x$parms[i,1]-0.1,      # 増加率（対数）の初期値（少し小さめに設定）
+       logit_b=ifelse(b_fix, logit(b_ini), max(min(x$parms[i,2],logit(b_max)-0.2),logit(b_min)+0.2)),       # 密度効果（ロジットスケール）の初期値
+        tilde_n0=x$parms[i,3]+0.2,        # 初期個体数の対数値の初期値
         log_tilde_q=x$parms[i,4]-0.1,
         log_sigma=x$parms[i,5],
         log_tau=x$parms[i,6],
