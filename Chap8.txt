@@ -111,22 +111,22 @@ Simulated_data <- function(dat, sdrep, Sim=1000, p=0.1, seed0=1, b_max=0.95, b_m
   id <- sample(Sim,m,prob=P)         # 抽出するものの番号を決定．重みを上の相対重みにする
   nt <- length(dat$CPUE)         # CPUE時系列の長さ（サンプルサイズ）
   
-  parms <- gen_par[id,]
-  n <- pops$n[,id]
-  u <- pops$u[,id]
-  Umsy <- pops$Umsy[id]
-  n0 <- pops$n0[,id]
-  n_last <- pops$n_last[,id]
-  n0_new <- pops$n0_new[id]
+  parms <- gen_par[id,]       # 重み付きで選択されたサンプルを抽出
+  n <- pops$n[,id]         # そのときの個体数（対数値）の時系列
+  u <- pops$u[,id]         # そのときの漁獲率の時系列
+  Umsy <- pops$Umsy[id]        # 選ばれたもののUmyの値
+  n0 <- pops$n0[,id]         # 初期個体数（対数値）の選ばれたもの
+  n_last <- pops$n_last[,id]       # 漁期後の個体数（対数値）の選ばれたもの
+  n0_new <- pops$n0_new[id]       # 翌年の対数個体数予測値
   
-  catch <- exp(n)*u
+  catch <- exp(n)*u        # 漁獲数
     
-  log_tilde_q <- parms[,"log_tilde_q"]
-  tau <- exp(parms[,"log_tau"])
-  eta <- exp(parms[,"log_eta"])
-  z <- matrix(rnorm(nt*m), nrow=nt, ncol=m)
-  z2 <- matrix(rnorm(nY*m), nrow=nY, ncol=m)
-  log_cpue <- matrix(NA, nrow=nt, ncol=m)
+  log_tilde_q <- parms[,"log_tilde_q"]       #
+  tau <- exp(parms[,"log_tau"])       #
+  eta <- exp(parms[,"log_eta"])       #
+  z <- matrix(rnorm(nt*m), nrow=nt, ncol=m)        #
+  z2 <- matrix(rnorm(nY*m), nrow=nY, ncol=m)        #
+  log_cpue <- matrix(NA, nrow=nt, ncol=m)        #
   log_q <- matrix(NA, nrow=nY, ncol=m)
   log_q[1,] <- rnorm(m, log_tilde_q, eta)
   
