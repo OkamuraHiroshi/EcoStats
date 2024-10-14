@@ -151,23 +151,23 @@ make_par <- function(x,i,b_max,b_min,b_fix,b_ini){         # TMB用のパラメ�
   list(log_r=x$parms[i,1]-0.1,      # 増加率（対数）の初期値（少し小さめに設定）
        logit_b=ifelse(b_fix, logit(b_ini), max(min(x$parms[i,2],logit(b_max)-0.2),logit(b_min)+0.2)),       # 密度効果（ロジットスケール）の初期値
         tilde_n0=x$parms[i,3]+0.2,        # 初期個体数の対数値の初期値
-        log_tilde_q=x$parms[i,4]-0.1,
-        log_sigma=x$parms[i,5],
-        log_tau=x$parms[i,6],
-        log_eta=x$parms[i,7],
-        log_q=log(x$q[,i])-0.5,
-        n0=x$n0[,i]+0.5
+        log_tilde_q=x$parms[i,4]-0.1,      # 漁獲効率（対数スケール）の初期値
+        log_sigma=x$parms[i,5],       # プロセス標準偏差（対数スケール）の初期値
+        log_tau=x$parms[i,6],       # 観測標準偏差（対数スケール）の初期値
+        log_eta=x$parms[i,7],       # 漁獲効率の標準偏差（対数スケール）の初期値
+        log_q=log(x$q[,i])-0.5,       #　漁獲効率（対数スケール）の初期値
+        n0=x$n0[,i]+0.5        # 初期個体数（対数スケール）の初期値
       )
 }
-sim2est <- function(Sim_dat,b_max=0.95,b_min=0.05,b_fix=FALSE,b_ini=0.8,filename="delury_ss",lo=c(-10,logit(b_min),rep(-10,5)),up=c(10,logit(b_max),rep(10,5))){
-  Res_sim <- list()
-  m <- Sim_dat$m
-  last_n <- last(Sim_dat$n)
-  maps <- NULL
-  if (b_fix) {
-    maps$logit_b <- factor(NA)
-    lo <- lo[-2]
-    up <- up[-2]
+sim2est <- function(Sim_dat,b_max=0.95,b_min=0.05,b_fix=FALSE,b_ini=0.8,filename="delury_ss",lo=c(-10,logit(b_min),rep(-10,5)),up=c(10,logit(b_max),rep(10,5))){       # シミュレーションデータにモデルをフィットしてパラメータを推定するプログラム
+  Res_sim <- list()       # 推定結果の入れ物を用意
+  m <- Sim_dat$m       # シミュレーションによる独立な時系列データの個数
+  last_n <- last(Sim_dat$n)       # 最終個体数の対数値
+  maps <- NULL       # パラメータを固定する際の設定を入れる変数
+  if (b_fix) {       # もしb_fix=TRUEなら
+    maps$logit_b <- factor(NA)      # logit_bは推定しないで，初期値のままにするという設定
+    lo <- lo[-2]        # bの下限値の設定を削除
+    up <- up[-2]        # bの上限値の設定を削除
   }
   
   for (i in 1:m){
