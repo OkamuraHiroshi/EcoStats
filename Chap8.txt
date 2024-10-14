@@ -121,33 +121,33 @@ Simulated_data <- function(dat, sdrep, Sim=1000, p=0.1, seed0=1, b_max=0.95, b_m
   
   catch <- exp(n)*u        # 漁獲数
     
-  log_tilde_q <- parms[,"log_tilde_q"]       #
-  tau <- exp(parms[,"log_tau"])       #
-  eta <- exp(parms[,"log_eta"])       #
-  z <- matrix(rnorm(nt*m), nrow=nt, ncol=m)        #
-  z2 <- matrix(rnorm(nY*m), nrow=nY, ncol=m)        #
-  log_cpue <- matrix(NA, nrow=nt, ncol=m)        #
-  log_q <- matrix(NA, nrow=nY, ncol=m)
-  log_q[1,] <- rnorm(m, log_tilde_q, eta)
+  log_tilde_q <- parms[,"log_tilde_q"]       # 初期漁獲効率の対数値
+  tau <- exp(parms[,"log_tau"])       # CPUEの観測標準偏差の対数値
+  eta <- exp(parms[,"log_eta"])       # 漁獲効率の変動を規定する標準偏差の対数値
+  z <- matrix(rnorm(nt*m), nrow=nt, ncol=m)        # CPUEの誤差のもと
+  z2 <- matrix(rnorm(nY*m), nrow=nY, ncol=m)        # 漁獲効率の変動のもと
+  log_cpue <- matrix(NA, nrow=nt, ncol=m)        # CPUEの対数値の入れ物
+  log_q <- matrix(NA, nrow=nY, ncol=m)       # 漁獲効率（対数値）の入れ物
+  log_q[1,] <- rnorm(m, log_tilde_q, eta)       # 初期漁獲効率
   
   for (i in 1:nt){
-    if (i>1 & START[i]==1) log_q[YEAR[i],] <- log_q[YEAR[i]-1,]+eta*z2[YEAR[i]-1,]
-    log_cpue[i,] <- log_q[YEAR[i],]+n[i,]+tau*z[i,]
+    if (i>1 & START[i]==1) log_q[YEAR[i],] <- log_q[YEAR[i]-1,]+eta*z2[YEAR[i]-1,]        # 年々の漁獲効率（ランダムウォーク）
+    log_cpue[i,] <- log_q[YEAR[i],]+n[i,]+tau*z[i,]        # CPUE対数値データを生成
   }
   
-  tcat <- sapply(1:m, function(i) tapply(catch[,i], YEAR, sum))
+  tcat <- sapply(1:m, function(i) tapply(catch[,i], YEAR, sum))        # 各年の総漁獲量
   
-  list(m=m, parms=parms, Umsy=Umsy, YEAR=YEAR-1, START=START, END=END, n0=n0, n_last=n_last, n0_new=n0_new, n=n, u=u, cpue=exp(log_cpue), catch=catch, tcat=tcat, q=exp(log_q))
+  list(m=m, parms=parms, Umsy=Umsy, YEAR=YEAR-1, START=START, END=END, n0=n0, n_last=n_last, n0_new=n0_new, n=n, u=u, cpue=exp(log_cpue), catch=catch, tcat=tcat, q=exp(log_q))         # 結果をアウトプット
 }
-Sim_dat <- Simulated_data(dat_ss, sdrep)
+Sim_dat <- Simulated_data(dat_ss, sdrep)        # シミュレーションデータを生成
 
-compile("delury_ss.cpp")
-dyn.load(dynlib("delury_ss"))
+compile("delury_ss.cpp")          # 7章で作成したデルーリーモデルをコンパイル
+dyn.load(dynlib("delury_ss"))          # デルーリーモデルのダイナミックリンクを作成
 
-make_dat <- function(x,i){
-  list(CPUE=x$cpue[,i], CAT=x$catch[,i], YEAR=x$YEAR, START=as.numeric(x$START), END=as.numeric(x$END), Y=nrow(x$n0))
+make_dat <- function(x,i){       # シミュレーションデータからTMB用のデータを作成する関数
+  list(CPUE=x$cpue[,i], CAT=x$catch[,i], YEAR=x$YEAR, START=as.numeric(x$START), END=as.numeric(x$END), Y=nrow(x$n0))       # TMB実行の際に必要となる形式のデータセット
 }
-make_par <- function(x,i,b_max,b_min,b_fix,b_ini){
+make_par <- function(x,i,b_max,b_min,b_fix,b_ini){         # TMB用のパラメータの初期値を作成する関数
   list(log_r=x$parms[i,1]-0.1,
        logit_b=ifelse(b_fix, logit(b_ini), max(min(x$parms[i,2],logit(b_max)-0.2),logit(b_min)+0.2)),
         tilde_n0=x$parms[i,3]+0.2,
