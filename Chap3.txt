@@ -60,7 +60,7 @@ hist(residuals(res5))      # typeとlog-体重とその交互作用を入れた�
 
 dat_M <- subset(dat, type=="M")      # 哺乳類のデータだけを抽出
 
-poly_reg <- function(k) lm(log_brain~poly(log_body,degree=k,raw=TRUE),data=dat_M)       # 多項式回帰をするための関数
+poly_reg <- function(k, data=dat_M) lm(log_brain~poly(log_body,degree=k,raw=TRUE),data=data)      # 多項式回帰をするための関数
 Res <- lapply(1:9, function(k) poly_reg(k))     # 多項式の次数を1から9まで変えてモデルをフィット
 
 par(mfrow=c(3,3))      # 3行3列（全部で9枚）のグラフを描きます
@@ -81,8 +81,7 @@ set.seed(123)           # 乱数のseed設定
 train_sp <- rownames(dat_M)[sample(nrow(dat_M),15)]       # 15個のデータをランダムに選んでtrainingデータとする（行名を選ぶ）
 train <- dat_M[rownames(dat_M) %in% train_sp,]         # trainingデータを生成
 test <- dat_M[!(rownames(dat_M) %in% train_sp),]       # trainingデータでないデータをtestデータとする
-poly_reg <- function(k) lm(log_brain~poly(log_body,degree=k,raw=TRUE),data=train)     # trainingデータを使用した次数kの多項式回帰
-Res1 <- lapply(1:9, function(k) poly_reg(k))       # 次数1~9の多項式回帰結果
+Res1 <- lapply(1:9, function(k) poly_reg(k, data=train))       # 次数1~9の多項式回帰結果（trainingデータを使用）
 train_ss <- test_ss <- NULL       # training/testデータのsum of squared errors
 for (i in 1:9){
    train_ss <- c(train_ss, sum((train$log_brain - predict(Res1[[i]]))^2))　　　　　# trainingデータの二乗誤差の和
@@ -93,6 +92,37 @@ train_ss <- train_ss/max(train_ss)*1.2*max(test_ss)     # train_ssの値の変�
 plot(test_ss,type="l",col="blue",xlab="Degree",ylab="sigma_squared",ylim=range(test_ss, train_ss),lwd=2)      # 次数に対してtest_ssをプロット
 lines(train_ss,col="gray",lwd=2,lty=2)     # train_ssを上描き
 legend("topright",c("Test","Training"),col=c("blue","gray"),lty=c(1,2),lwd=2)     # 凡例を作成
+
+beta <- c(1,-1.5,3,-0.8); sigma <- 2; n <- 50; d <- 9; Sim <- 1000       # パラメータの初期設定
+x <- scale((1:n))         # 説明変数xを作成
+true_y <- cbind(1,poly(x,degree=3,raw=TRUE))%*%beta         # 真の平均値（xの3次曲線になっている）を作成
+bv_test <- NULL         # テストデータの予測のバイアスと分散を入れる入れ物
+set.seed(1)          # 乱数のseed設定
+Pred_train <- Pred_test <- NULL         # トレーニングとテストの予測値を入れる入れ物
+for (i in 1:Sim){
+  y <- rnorm(n, true_y, sigma)         # 平均値に誤差を足して観測値yを作成
+  dat <- data.frame(y=y, x=x, t_y=true_y)            # y，x，yの真の値（ノイズなし）のデータ
+  dat_train <- dat[1:(n-1),]; dat_test <- dat[n,]         # トレーニングデータとテストデータの設定
+  mod <- lapply(1:d, function(k) lm(y~poly(x,degree=k,raw=TRUE),data=dat_train))          # トレーニングデータに次数1-9の多項式回帰を適用
+  pred_train <- sapply(1:d, function(k) mean((dat_train$y-predict(mod[[k]]))^2))          # トレーニングのMSE
+  Pred_train <- rbind(Pred_train, pred_train)           # トレーニングMSEを記録
+  pred_test <- sapply(1:d, function(k) predict(mod[[k]], newdata=dat_test))           # テストの予測値
+  Pred_test <- rbind(Pred_test, pred_test)           # テスト予測値を記録 
+}
+colnames(Pred_train) <- colnames(Pred_test) <- 1:d          # 次数を予測誤差結果の列名とする
+bv_test <- rbind(bv_test, colMeans(dat_test$t_y-Pred_test)^2, apply(Pred_test,2,var))         # バイアスの2乗と分散を記録
+rownames(bv_test) <- c("Bias2","Var")        # 行名を設定
+
+bv <- as.data.frame(t(bv_test))       # 上のbv_testを転置する
+bv$MSE <- rowSums(bv)+sigma^2        # バイアス2乗+分散+残差分散でMSEを計算
+bv <- cbind(Degree=1:d,bv)        # 次数の列を追加
+plot(MSE~Degree, data=bv, type="l", col="blue", lwd=3, ylim=c(0,max(bv$MSE)*1.2))        # 次数に対してテストMSEをプロット
+lines(Bias2~Degree, data=bv, lwd=3, lty=2)         # 次数に対してバイアスの2乗をプロット
+lines(Var~Degree, data=bv, lwd=3, lty=3)        # 次数に対して分散をプロット
+MSE_train <- data.frame(Degree=1:d, MSE=colMeans(Pred_train))        # 次数とトレーニングMSEのデータ
+lines(MSE~Degree, data=MSE_train, lwd=3, col="gray60", lty=4)        # 次数に対してトレーニングMSEをプロット
+abline(h=sigma^2,lty=5)        # 誤差の分散に線を引く
+legend("topright",c("Bias2","Variance","Test MSE","Train MSE"), col=c("black","black","blue","gray"), lty=c(2,3,1,4), lwd=3)        # 線の意味を凡例に記載
 
 ## 3 - 4 カルバックライブラー情報量
 
