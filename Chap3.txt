@@ -122,7 +122,7 @@ lines(Var~Degree, data=bv, lwd=3, lty=3)        # 次数に対して分散をプ
 MSE_train <- data.frame(Degree=1:d, MSE=colMeans(Pred_train))        # 次数とトレーニングMSEのデータ
 lines(MSE~Degree, data=MSE_train, lwd=3, col="gray60", lty=4)        # 次数に対してトレーニングMSEをプロット
 abline(h=sigma^2,lty=5)        # 誤差の分散に線を引く
-legend("topright",c("Bias2","Variance","Test MSE","Train MSE"), col=c("black","black","blue","gray"), lty=c(2,3,1,4), lwd=3)        # 線の意味を凡例に記載
+legend("top",c("Bias2","Variance","Test MSE","Train MSE"), col=c("black","black","blue","gray"), lty=c(2,3,1,4), lwd=3)        # 線の意味を凡例に記載
 
 ## 3 - 4 カルバックライブラー情報量
 

@@ -176,86 +176,85 @@ sim2est <- function(Sim_dat,b_max=0.95,b_min=0.05,b_fix=FALSE,b_ini=0.8,filename
       par_sim <- make_par(Sim_dat,i,b_max,b_min,b_fix,b_ini)       # i番目のシミュレーションのパラメータ値を抽出してTMBの初期値とする
       obj_sim <- MakeADFun(dat_sim, par_sim, map=maps, random=c("log_q","n0"), DLL=filename, silent=TRUE)       # 自動微分による勾配関数を作成する
       mod_sim <- nlminb(obj_sim$par, obj_sim$fn, obj_sim$gr, lower=lo, upper=up)      # TMBで作られた目的関数や勾配関数を与えて最適化
-      sdrep_sim <- sdreport(obj_sim)
-      Res_sim[[i]] <- list(b_fix=b_fix,b_ini=b_ini,obj=obj_sim,mod=mod_sim,sdrep=sdrep_sim)
+      sdrep_sim <- sdreport(obj_sim)         # パラメータのSDを記録
+      Res_sim[[i]] <- list(b_fix=b_fix,b_ini=b_ini,obj=obj_sim,mod=mod_sim,sdrep=sdrep_sim)       # 結果の記録
     } else {
-      temp1 <- matrix(0, nrow=4, ncol=2)
-      rownames(temp1) <- c("b","N0_new","log_r","q")
-      temp1[4,1] <- 0.000001
-      colnames(temp1) <- c("Estimate","Std. Error")
-      Res_sim[[i]] <- list(b_fix=b_fix,b_ini=b_ini,sdrep=temp1)
+      temp1 <- matrix(0, nrow=4, ncol=2)         # データが不十分で推定ができないときのため
+      rownames(temp1) <- c("b","N0_new","log_r","q")       # あとで必要な情報だけ記録
+      temp1[4,1] <- 0.000001          # あとでエラーが出ないように適当な値を入れておく
+      colnames(temp1) <- c("Estimate","Std. Error")       # 推定値の列名
+      Res_sim[[i]] <- list(b_fix=b_fix,b_ini=b_ini,sdrep=temp1)        # 結果の記録
     }
   }
-  return(Res_sim)
+  return(Res_sim)        # 結果をアウトプット
 }
-Res_sim <- sim2est(Sim_dat)
+Res_sim <- sim2est(Sim_dat)          # シミュレーションデータにモデルを自動でフィットする
 
-Bias_plot <- function(res,dat,main="密度効果推定"){
-  m <- dat$m
-  Umsy_est <- logit(as.numeric(sapply(1:m, function(i) summary(res[[i]]$sdrep)[rownames(summary(res[[i]]$sdrep))=="Umsy",1])))
-  Umsy_true <- logit(as.numeric(dat$Umsy))
-  Umsy_bias <- Umsy_est-Umsy_true
+Bias_plot <- function(res,dat,main="密度効果推定"){       # バイアスをプロットする関数
+  m <- dat$m        # シミュレーションデータの個数
+  Umsy_est <- logit(as.numeric(sapply(1:m, function(i) summary(res[[i]]$sdrep)[rownames(summary(res[[i]]$sdrep))=="Umsy",1])))        # シミュレーションデータに対するUmsyの推定値（ロジットスケール）
+  Umsy_true <- logit(as.numeric(dat$Umsy))       # Umsyの真値（ロジットスケール）
+  Umsy_bias <- Umsy_est-Umsy_true       # バイアス計算
 
-  N0_new_est <- log(as.numeric(sapply(1:m, function(i) summary(res[[i]]$sdrep)[rownames(summary(res[[i]]$sdrep))=="N0_new",1])))
-  N0_new_true <- dat$n0_new
-  N0_new_bias <- N0_new_est-N0_new_true
+  N0_new_est <- log(as.numeric(sapply(1:m, function(i) summary(res[[i]]$sdrep)[rownames(summary(res[[i]]$sdrep))=="N0_new",1])))       # シミュレーションデータに対する漁獲前の個体数推定値（対数スケール）
+  N0_new_true <- dat$n0_new        # 真の漁獲前の個体数推定値（対数スケール）
+  N0_new_bias <- N0_new_est-N0_new_true         # バイアス計算
 
-  dat_rb <- data.frame(Bias=c(Umsy_bias, N0_new_bias),Type=factor(c(rep("Umsy (logit)",m),rep("N0_new (log)",m)),levels=c("Umsy (logit)","N0_new (log)")))
+  dat_rb <- data.frame(Bias=c(Umsy_bias, N0_new_bias),Type=factor(c(rep("Umsy (logit)",m),rep("N0_new (log)",m)),levels=c("Umsy (logit)","N0_new (log)")))        # バイアス結果をまとめたデータセット作成
 
-  mB <- dat_rb %>% group_by(Type) %>% summarize(mB=mean(Bias))
+  mB <- dat_rb %>% group_by(Type) %>% summarize(mB=mean(Bias))         # バイアスの平均
 
-  p1 <- ggplot(dat_rb, aes(x=Type,y=Bias,fill=Type))+geom_boxplot()+theme_bw()+annotate("text", x = c(1,2), y = c(3,3), label = c(round(mean(Umsy_bias),2), round(mean(N0_new_bias),2)), color="blue", size=5, fontface="bold")+ggtitle(main)
+  p1 <- ggplot(dat_rb, aes(x=Type,y=Bias,fill=Type))+geom_boxplot()+theme_bw()+annotate("text", x = c(1,2), y = c(3,3), label = c(round(mean(Umsy_bias),2), round(mean(N0_new_bias),2)), color="blue", size=5, fontface="bold")+ggtitle(main)          # グラフ作成
 
-  print(p1)
-  return(mB$mB)
+  print(p1)        # グラフ表示
+  return(mB$mB)        # データをアウトプット
 }
-mB <- Bias_plot(Res_sim, Sim_dat)
+mB <- Bias_plot(Res_sim, Sim_dat)       # バイアスデータ保存と図の表示
 
-Res_sim1 <- sim2est(Sim_dat, b_fix=TRUE, b_ini=0.8)
-mB1 <- Bias_plot(Res_sim1, Sim_dat, main="密度効果固定")
+Res_sim1 <- sim2est(Sim_dat, b_fix=TRUE, b_ini=0.8)       # 密度効果パラメータbを0.8で固定
+mB1 <- Bias_plot(Res_sim1, Sim_dat, main="密度効果固定")       # bを固定した場合のバイアスデータ保存と図の表示
 
 ## 8 - 2 シミュレーションで将来予測してみよう！
 
-make_sigma <- function(Res){
-  m <- length(Res)
-  Umsy <- sapply(1:m, function(i) summary(Res[[i]]$sdrep)[rownames(summary(Res[[i]]$sdrep))=="Umsy",1])
-  sigma_Umsy <- mean(sapply(1:m, function(i) summary(Res[[i]]$sdrep)[rownames(summary(Res[[i]]$sdrep))=="Umsy",2])/(Umsy*(1-Umsy)),na.rm=TRUE)
-  sigma_n0_new <- mean(sapply(1:m, function(i) summary(Res[[i]]$sdrep)[rownames(summary(Res[[i]]$sdrep))=="N0_new",2])/sapply(1:m, function(i) summary(Res[[i]]$sdrep)[rownames(summary(Res[[i]]$sdrep))=="N0_new",1]),na.rm=TRUE)
-  c(sigma_Umsy, sigma_n0_new)
+make_sigma <- function(Res){         # Umsyと初期個体数の標準誤差を計算する関数
+  m <- length(Res)        # Resの個数
+  Umsy <- sapply(1:m, function(i) summary(Res[[i]]$sdrep)[rownames(summary(Res[[i]]$sdrep))=="Umsy",1])        # Umsyの推定値
+  sigma_Umsy <- mean(sapply(1:m, function(i) summary(Res[[i]]$sdrep)[rownames(summary(Res[[i]]$sdrep))=="Umsy",2])/(Umsy*(1-Umsy)),na.rm=TRUE)       # Umsyの推定値と標準誤差を使用して，ロジットスケールの標準誤差を計算（デルタ法を使用）
+  sigma_n0_new <- mean(sapply(1:m, function(i) summary(Res[[i]]$sdrep)[rownames(summary(Res[[i]]$sdrep))=="N0_new",2])/sapply(1:m, function(i) summary(Res[[i]]$sdrep)[rownames(summary(Res[[i]]$sdrep))=="N0_new",1]),na.rm=TRUE)      # 個体数推定値とその標準誤差を利用して，対数スケールの標準誤差を計算（デルタ法を使用）
+  c(sigma_Umsy, sigma_n0_new)      # 結果のアウトプット
 }
-Future_Sim <- function(Sim_dat, Res_sim, FY=20, Strategy="true", beta=1.0, scale_tau=1, max_u=0.95, min_u=0.05, bias=c(0,0), seed0=1){
-  set.seed(seed0)
-  m <- Sim_dat$m
-  parms <- Sim_dat$parms
+Future_Sim <- function(Sim_dat, Res_sim, FY=20, Strategy="true", beta=1.0, scale_tau=1, max_u=0.95, min_u=0.05, bias=c(0,0), seed0=1){         # 将来予測を行うプログラム
+  set.seed(seed0)        # 乱数のseedを決定
+  m <- Sim_dat$m         # シミュレーションデータの個数
+  parms <- Sim_dat$parms       # シミュレーションデータの発生の際に使用した真のパラメータ値
   
-  log_r <- parms[,"log_r"]
-  if (names(parms)[2]=="logit_b") b <- 1/(1+exp(-parms[,2])) else b <- exp(parms[,2])
+  log_r <- parms[,"log_r"]        # 増加率（対数値）の取得
+  if (colnames(parms)[2]=="logit_b") b <- 1/(1+exp(-parms[,2])) else b <- exp(parms[,2])        # 密度効果の取得（密度効果がロジットスケールの場合は逆ロジット変換．対数スケールの場合は，指数変換を行う）
   
-  Umsy <- Sim_dat$Umsy
-  sigma <- exp(parms[,"log_sigma"])
+  Umsy <- Sim_dat$Umsy       # シミュレーションデータに対するUmsy（真値）の取得
+  sigma <- exp(parms[,"log_sigma"])         # プロセス標準偏差を取得
   
-  period <- sample(as.numeric(table(Sim_dat$YEAR)),FY,replace=TRUE)
+  period <- sample(as.numeric(table(Sim_dat$YEAR)),FY,replace=TRUE)      # 年内の漁獲する週数を元の週数を参考にランダムに決定
   
-  U <- surv <- Cat <- Num <- matrix(NA, nrow=sum(period), ncol=m)
+  U <- surv <- Cat <- matrix(NA, nrow=sum(period), ncol=m)        # 漁獲率，生残率，漁獲尾数の入れ物
   
-  sigmas <- make_sigma(Res_sim)
-  Umsy_fixed <- Res_sim[[1]]$b_fix
-  Umsy_ini <- as.numeric(Res_sim[[1]]$b_ini)
+  sigmas <- make_sigma(Res_sim)      # プロセス標準偏差を計算
+  Umsy_fixed <- Res_sim[[1]]$b_fix       # b_fixがTRUEかFALSEか
+  Umsy_ini <- as.numeric(Res_sim[[1]]$b_ini)       # bの初期値
   
-  eps <- matrix(rnorm(FY*m,0,sigma),nrow=FY,ncol=m,byrow=TRUE)
+  eps <- matrix(rnorm(FY*m,0,sigma),nrow=FY,ncol=m,byrow=TRUE)       # 初期個体数のプロセス誤差
 
-  cp <- c(1,cumsum(period))
-  cp[1] <- 0
+  cp <- c(0,cumsum(period))       # 将来の漁獲期間が最初からはじめて何週目になっているか（後の計算で使用する）
   
-  for (j in 1:FY){
-    if (Strategy=="true"){
-      U0 <- pmin(as.numeric(ifelse(exp(last(Sim_dat$n)) > 0, beta*pmax(pmin(Umsy,max_u),min_u), 0.00001)),1)
-      Tcat <- U0*as.numeric(ifelse(exp(last(Sim_dat$n)) > 0, exp(Sim_dat$n0_new), 0))
+  for (j in 1:FY){        # 将来1年目からFY年目まで
+    if (Strategy=="true"){        # 管理戦略の変数StrategyがTRUEとなっていたら
+      U0 <- pmin(as.numeric(ifelse(exp(last(Sim_dat$n)) > 0, beta*pmax(pmin(Umsy,max_u),min_u), 0.00001)),0)          # 最終個体数が正なら真のUmsy値を，そうでなければ0を返す
+      Tcat <- U0*as.numeric(ifelse(exp(last(Sim_dat$n)) > 0, exp(Sim_dat$n0_new), 0))       # 最終個体数が正なら真の初期個体数を，そうでなければ0を返すものに，上のU0を掛けて総漁獲尾数を計算
     }
     if (Strategy=="est"){
-      if (Umsy_fixed) U0 <- pmax(pmin(beta*Umsy_ini,max_u),min_u) else U0 <- pmin(as.numeric(ifelse(exp(last(Sim_dat$n)) > 0, pmax(pmin(beta*ilogit(rnorm(m,logit(Umsy)+bias[1],sigmas[1])),max_u),min_u),0.00001)),1)
-      N0_new_est <- as.numeric(ifelse(exp(last(Sim_dat$n)) > 0,exp(rnorm(m,Sim_dat$n0_new+bias[2],sigmas[2])),0))
-      Tcat <- U0*N0_new_est
+      if (Umsy_fixed) U0 <- pmax(pmin(beta*Umsy_ini,max_u),min_u) else U0 <- pmin(as.numeric(ifelse(exp(last(Sim_dat$n)) > 0, pmax(pmin(beta*ilogit(rnorm(m,logit(Umsy)+bias[1],sigmas[1])),max_u),min_u),0.00001)),0)         # Umsy_fixedがTRUEなら固定したbeta*Umsyを．FALSEなら，バイアスと誤差を考慮したうえでbeta*Umsyの推定結果を返す
+      N0_new_est <- as.numeric(ifelse(exp(last(Sim_dat$n)) > 0,exp(rnorm(m,Sim_dat$n0_new+bias[2],sigmas[2])),0))          # 最終個体数が正ならバイアスと誤差を考慮したうえで年最初の個体数推定値を返し，そうでなければ0を返す
+      Tcat <- U0*N0_new_est        # 総漁獲尾数を計算
     }
     nr <- cp[j+1]-cp[j]
     U[(cp[j]+1):cp[j+1],] <- matrix(1-(1-U0)^(1/period[j]),nrow=nr,ncol=m,byrow=TRUE)
