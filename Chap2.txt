@@ -4,9 +4,9 @@
 
 # 一様分布のグラフ
 plot(NA, xlim=c(0,1), ylim=c(0,1), xlab="Variable", ylab="Probability", frame.plot=FALSE)      # x軸，y軸とも0から1の範囲の座標を設定
-segments(0,0,0,1,col="blue")   # (0,0)から(0,1)へ線分を引く
-segments(0,1,1,1,col="blue")   # (0,1)から(1,1)へ線分を引く
-segments(1,1,1,0,col="blue")   # (1,1)から(1,0)へ線分を引く
+segments(0,0,0,1,col="blue",lty=2)   # (0,0)から(0,1)へ線分（破線）を引く
+segments(0,1,1,1,col="blue")   # (0,1)から(1,1)へ線分（実線）を引く
+segments(1,1,1,0,col="blue",lty=2)   # (1,1)から(1,0)へ線分（破線）を引く
 
 ## 2 - 2 正規分布
 
