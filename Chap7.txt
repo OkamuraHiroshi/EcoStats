@@ -116,7 +116,7 @@ dd_saiga <- function(p, dat){       # サイガデータで密度効果を入れ
   
   sum((Y -(log_r*(1-b^T)/(1-b)*1/sqrt(T) + b^T*log_N0/sqrt(T)))^2)       # 残差の二乗和（最小化すべき目的関数）
 }
-res <- nlm(f2, c(0.3,13,3), dat=dat_kk, iterlim=100, hessian=TRUE)       # 最適化
+res <- nlm(dd_saiga, c(0.3,13,3), dat=dat_kk, iterlim=100, hessian=TRUE)       # 最適化
 ( parms <- c(r=exp(res$estimate[1]), N0=exp(res$estimate[2]), b=1/(1+exp(-res$estimate[3]))) )        # 各パラメータの推定値
 
 r <- parms["r"]        # 増加率
