@@ -105,6 +105,26 @@ mod_l <- nls(N2~N1+r*N1*(1-N1/K), start=list(r=0.5, K=600))         # 非線形�
 plot(N1, N2, xlab=expression(N[t]), ylab=expression(N[t+1]), pch=16)       # N_tに対するN_{t+1}のプロット
 lines(N1, predict(mod_l), col="blue", lwd=2)        # ロジスティックモデルによる予測値
 
+dd_saiga <- function(p, dat){       # サイガデータで密度効果を入れた予測モデルの誤差の二乗和を計算する関数
+  dat <- subset(dat, !is.na(Y))       # 観測値があるデータだけを使用
+  Y <- dat$Y       # 応答変数
+  T <- dat$T       # 時間
+  
+  log_r <- p[1]       # log_r
+  log_N0 <- p[2]        # log_N0
+  b <- 1/(1+exp(-p[3]))       # 密度効果パラメータ b
+  
+  sum((Y -(log_r*(1-b^T)/(1-b)*1/sqrt(T) + b^T*log_N0/sqrt(T)))^2)       # 残差の二乗和（最小化すべき目的関数）
+}
+res <- nlm(f2, c(0.3,13,3), dat=dat_kk, iterlim=100, hessian=TRUE)       # 最適化
+( parms <- c(r=exp(res$estimate[1]), N0=exp(res$estimate[2]), b=1/(1+exp(-res$estimate[3]))) )        # 各パラメータの推定値
+
+r <- parms["r"]        # 増加率
+N0 <- parms["N0"]         # 初期個体数
+b <- parms["b"]        # 密度効果
+dat_kk$Pred2 <- exp((log(r)*(1-b^dat_kk$T)/(1-b)*dat_kk$X2+b^dat_kk$T*log(N0)*dat_kk$X2)*dat_kk$X1)          # 密度効果モデルによる個体数の予測値
+ggplot(dat_kk, aes(x=Year, y=Pop))+geom_point()+geom_line(aes(x=Year, y=Pred2), color="blue", linetype="dashed")+labs(y="Population Size", title=dat_kk$Location[1])+theme_bw()         # 密度効果モデルによる個体数予測値のプロット
+
 ## 7 - 4 最大持続生産量
 
 delury <- read.csv("DeLury.csv")         # 6章で使用したデルーリー法のデータを読み込み
