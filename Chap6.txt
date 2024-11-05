@@ -31,7 +31,7 @@ numeric_deriv <- function(mod, h=0.00001){     # 個体数推定値のパラメ�
   p <- mod$coef      # 回帰のパラメータ
   X <- model.matrix(mod)        # 説明変数
   d <- h*diag(length(p))        # 数値微分のために回帰係数に足し引きする微小量を与える
-  (apply(d, 1, function(x) sum(1/ilogit(X%*%(p+x))))-apply(d, 1, function(x) sum(1/ilogit(X%*%(p-x)))))/(2*h)      # 各パラメータに対する個体数推定値の微分
+  apply(d,1,function(x) (sum(1/ilogit(X%*%(p+x)))-sum(1/ilogit(X%*%(p-x))))/(2*h))      # 各パラメータに対する個体数推定値の微分
 }
 var_N <- t(numeric_deriv(mod2))%*%vcov(mod2)%*%numeric_deriv(mod2)       # デルタ法による個体数の近似分散
 se_N <- sqrt(var_N)        # 個体数の標準誤差
@@ -70,8 +70,8 @@ log_like <- function(p, dat, x_max=Inf){        # 発見確率のパラメータ
   x <- dat$pd       # 垂直横距離
   x <- x[x <= x_max]        # x_max以下の距離データに制限（truncationと言う）
   sigma <- exp(p)       # 発見確率のパラメータ sigma
-#  w <- integrate(g,0,w,sigma=sigma)$value        # 有効探索幅の計算（一般には解析的に求められないので，数値積分などで計算する．発見関数が半正規分布の場合は，pnormで計算可能）
   w <- sqrt(2*pi)*sigma*(pnorm(x_max,0,sigma)-pnorm(0,0,sigma))       # 発見関数が半正規分布のときの有効探索幅
+  #  w <- integrate(g,0,w,sigma=sigma)$value        # 有効探索幅の計算（一般には解析的に求められないので，数値積分などで計算する．発見関数が半正規分布の場合は，pnormで計算可能）
   -sum(log(g(x,sigma))-log(w))       # 横距離データに対する負の対数尤度
 }
 init_p <- log(mean(dat$pd))      #   発見確率のパラメータ（sigmaの対数値）の初期値（平均横距離の対数を与える）
@@ -96,7 +96,7 @@ A <- 4105*1000^2         # 調査面積（?sparrowSiteDataから情報を得る�
 numeric_deriv <- function(mod, h=0.00001){       # 有効探索幅のパラメータによる数値微分を行う関数
   p <- mod$estimate      # 最適化で推定されたパラメータ
   d <- h*diag(length(p))         # 数値微分のための微小量の設定
-  (apply(d, 1, function(x) esw(exp(p+x)))-apply(d, 1, function(x) esw(exp(p-x))))/(2*h)       # 数値微分
+  apply(d, 1, function(x) (esw(exp(p+x)) - esw(exp(p-x)))/(2*h))      # 数値微分
 }
 var_w <- t(numeric_deriv(mod))%*%(1/mod$hessian)%*%numeric_deriv(mod)       # デルタ法による有効探索幅の分散の計算
 cv_w <- sqrt(var_w)/w        # 有効探索幅の変動係数
@@ -196,22 +196,37 @@ ggplot(dat_for_gg2,aes(x=Model,y=Trend))+geom_boxplot()+geom_hline(yintercept=lo
 library(glmmTMB)       # glmmTMBパッケージの読み込み
 library(rvest)       # rvestパッケージの読み込み
 library(stringr)       # stringrパッケージの読み込み
-html <- read_html("https://iotc.org/data/datasets/latest/CE/Longline")       # はえ縄で漁獲されたまぐろの漁獲情報が載っているウェブサイトの場所
+html <- read_html("https://iotc.org/data/datasets/latest/CE/Surface")       # 表層漁業で漁獲されたまぐろの漁獲情報が載っているウェブサイトの場所
 zip_loc <- html %>% html_elements("a") %>% html_attr("href") %>% str_subset("\\.zip")       # 上記ウェブサイトにあるzipファイルを抽出
 temp <- tempfile()      # 空のファイル名を設定
 download.file(zip_loc, temp)        # zipファイルをtempとしてダウンロード
 cpue_dat <- read.csv(unzip(temp))         # tempを解凍して，中のcsvファイルを読み込む
-YFT_dat <- cpue_dat[,c(1:12,13:15)]          # 必要なデータの抽出
+YFT_dat <- cpue_dat[,1:15]          # 必要なデータの抽出
 YFT_dat$Catch <- apply(YFT_dat[,13:15],1,sum,na.rm=TRUE)         # 漁獲量の列を作成
-dat <- subset(YFT_dat, Year >= 2000 & substr(YFT_dat$Fleet,1,3)=="JPN")        # 2000年以降日本が漁獲したデータに限定してdatとする
+dat <- subset(YFT_dat, Year >= 2014 & substr(YFT_dat$Fleet,1,3)=="JPN")        # 2014年以降日本が漁獲したデータに限定してdatとする
 dat$Year <- factor(dat$Year)       # 年の情報をカテゴリーにする（年による非線形なトレンドをとらえるため，CPUE標準化ではよくやられる）
 dat$Month <- (dat$MonthStart+dat$MonthEnd)/2      # 開始月と終了月の記録があるので，平均したものを月とする
 dat$Month <- factor(dat$Month)       # 月をカテゴリーにする
 dat$Grid <- factor(dat$Grid)       # 漁獲場所が数字で与えられているので，これもカテゴリーにする
-mod_td0 <- glmmTMB(Catch~ Year-1,offset=log(Effort),family=tweedie,data=dat)       # 誤差分布をTweedieにして，努力量の対数値をoffsetにし，年の効果だけを考慮したモデル（-1することで切片を除く）
+mod_td0 <- glmmTMB(Catch~ Year-1,offset=log(Effort),family=tweedie,data=dat)       # 誤差分布をTweedieにして，努力量の対数値をoffsetにし，年の効果だけを考慮したモデル（-1することで切片を除く（年効果を見やすくするため））
 mod_td1 <- glmmTMB(Catch~ Year+(1|Month)+(1|Grid)-1,offset=log(Effort),family=tweedie,data=dat)        # 上と同じ設定で，月と場所をランダム効果にして加えたモデル
 mod_td2 <- glmmTMB(Catch~ Year+(1|Month)+(1|Grid)+(1|Year:Month)+(1|Year:Grid)-1,offset=log(Effort),family=tweedie,data=dat)         # 上と同じ設定で，月と場所，年と月の交互作用，年と場所の交互作用をランダム効果にして加えたモデル
 AIC(mod_td0,mod_td1,mod_td2)        # 3つのモデルのAICを比較
+
+set.seed(1)      # 乱数のseedを設定
+library(xgboost)        # xgboostパッケージの読み込む
+dat_xgb <- dat %>% mutate_at(vars(Year, Month), as.numeric)       # xgboost用に年と月を数値にする
+X_xgb <- model.matrix(~Year+Month+Grid, data=dat_xgb)        # 特徴量行列を抽出
+Y_xgb <- dat_xgb$Catch/dat_xgb$Effort        # 目的変数
+mod_xgb_cv <- xgb.cv(param=list("objective" = "reg:tweedie"), data=X_xgb, label=Y_xgb, nfold=5, subsample=0.5, eta=0.1, nrounds=100, verbose=0)       # Tweedie損失関数を使用したxgboostのcross validation
+nround_xgb <- which.min(mod_xgb_cv$evaluation_log[[4]])+1        # 最適繰り返し数を選択
+mod_xgb <- xgboost(param=list("objective" = "reg:tweedie"), data=X_xgb, label=Y_xgb, subsample=0.5, eta=0.1, nrounds=nround_xgb, verbose=0)       # 最適にチューニングしたxgboostの実行
+pred_xgb <- dat$Effort*predict(mod_xgb,X_xgb,type="response")        # xgboostによる漁獲量の予測
+pred_tmb <- predict(mod_td2, type="response")         # glmmTMBのベストモデルによる漁獲量の予測
+cor(dat$Catch, pred_xgb)       # 観測値とxgboost予測値の相関
+cor(dat$Catch, pred_tmb)       # 観測値とglmmTMB予測値の相関
+dat_pp <- data.frame(Mod=factor(rep(c("xgboost","glmmTMB"),each=nrow(dat)),levels=c("xgboost","glmmTMB")), Obs=rep(dat$Catch,2),Pred=c(pred_xgb, pred_tmb))         # xgboostとglmmTMBを比較するプロットのためのデータ
+ggplot(dat_pp, aes(x=Obs, y=Pred, color=Mod))+geom_point()+theme_bw()       # xgboostとglmmTMB結果の比較プロット
 
 pred0 <- exp(mod_td0$fit$parfull[names(mod_td0$fit$parfull)=="beta"])      # 上のモデルmod_td0による年の効果（固定効果）から計算した個体数指標値
 pred1 <- exp(mod_td1$fit$parfull[names(mod_td1$fit$parfull)=="beta"])      # 上のモデルmod_td1による年の効果（固定効果）から計算した個体数指標値
