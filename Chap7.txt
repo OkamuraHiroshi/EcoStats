@@ -16,6 +16,21 @@ dat_kk <- dat_kk %>% mutate(Y=log(Pop)/sqrt(T), X1=sqrt(T), X2=1/sqrt(T))       
 mod <- lm(Y ~ X1 + X2 - 1, data=dat_kk)       # 線形回帰を実行
 ( parms <- c(r = as.numeric(exp(mod$coef[1])), N0 = as.numeric(exp(mod$coef[2]))) )      # 回帰係数から増加率と初期個体数を計算
 
+library(reshape2)       # reshape2パッケージを読み込み
+p1 <- sort(mod$coef[1]+seq(-0.5,0.5,by=0.05))       # log rの範囲を設定
+p2 <- sort(mod$coef[2]+seq(-3,3,by=0.1))       # log N0の範囲を設定
+p <- expand.grid(p1=p1,p1=p2)        # log rとlog N0のグリッドを作成
+rmse <- function(p, dat) {       # RMSEを計算する関数
+  p1 <- as.numeric(p[1])       # log_r
+  p2 <- as.numeric(p[2])       # log_N0
+  
+  sqrt(mean((dat$Y-(p1*dat$X1+p2*dat$X2))^2,na.rm=TRUE))       # RMSE
+}
+obj <- matrix(apply(p, 1, rmse, dat=dat_kk), nrow=length(p1))      # パラメータのグリッドに対してRMSEを計算
+dat_c <- melt(obj)        # 行列になっているデータをggplot描画用データに変換
+p1 <- ggplot(dat_c, aes(Var1, Var2, z=value, colour=after_stat(level))) + geom_contour() + labs(x="log(r)", y="log(N0)") + theme_bw() + scale_colour_distiller(palette="PuBu", direction=-1) + annotate("text",mod$coef[1],mod$coef[2],label="X",colour="red")        # RMSEの等高線図を作成
+print(p1)        # 図を描画
+
 r <- parms["r"]       # 増加率
 N0 <- parms["N0"]       # 初期個体数
 dat_kk$Pred <- exp((log(r)*dat_kk$X1+log(N0)*dat_kk$X2)*dat_kk$X1)        # モデルによる予測個体数を計算
