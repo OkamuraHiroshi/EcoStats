@@ -178,8 +178,8 @@ ggplot(out_fox, aes(x = N, y = U)) + theme_bw() +
   geom_rect(xmin = 1, xmax = 2, ymin = 1, ymax = 2, fill = 'orange', alpha = 0.05) + 
   geom_path(linetype = 2, linewidth = 0.4) +
   geom_point(aes(size=Y, fill=Y), shape = 21) +
-  scale_fill_continuous(limits=c(min_Y,max_Y),breaks=seq(min_Y,max_Y,by=1)) + 
-  scale_size_continuous(limits=c(min_Y,max_Y),breaks=seq(min_Y,max_Y,by=1)) +
+  scale_fill_continuous(limits=c(min_Y,max_Y),breaks=seq(min_Y,max_Y)) + 
+  scale_size_continuous(limits=c(min_Y,max_Y),breaks=seq(min_Y,max_Y)) +
   labs(y="Fishing Rate", x="Population Size", fill="Year", size="Year") +
   guides(fill= guide_legend(), size=guide_legend()) +
   scale_y_continuous(limits=c(0,2)) + scale_x_continuous(limits=c(0,2))         # Kobeプロット（資源状態の診断プロット）の描画
@@ -360,8 +360,8 @@ ggplot(out_ss, aes(x = N, y = U)) + theme_bw() +          # Kobe plotを描画
   geom_rect(xmin = 1, xmax = 3, ymin = 1, ymax = 2, fill = 'orange', alpha = 0.05) + 
   geom_path(linetype = 2, linewidth = 0.4) +
   geom_point(aes(size=Y, fill=Y), shape = 21) +
-  scale_fill_continuous(limits=c(min_Y,max_Y),breaks=seq(min_Y,max_Y,by=1)) + 
-  scale_size_continuous(limits=c(min_Y,max_Y),breaks=seq(min_Y,max_Y,by=1)) +
+  scale_fill_continuous(limits=c(min_Y,max_Y),breaks=seq(min_Y,max_Y)) + 
+  scale_size_continuous(limits=c(min_Y,max_Y),breaks=seq(min_Y,max_Y)) +
   labs(y="Fishing Rate", x="Population Size", fill="Year", size="Year") +
   guides(fill= guide_legend(), size=guide_legend()) +
   scale_y_continuous(limits=c(0,2)) + scale_x_continuous(limits=c(0,3))
