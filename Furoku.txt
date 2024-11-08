@@ -47,51 +47,51 @@ ff <- function(m,d=0.000001) (f(m+d)-f(m-d))/(2*d)    #  数値微分
 
 ## ランダム効果がある場合のコード
 
-sink("norm_r.cpp")
-cat("
+sink("norm_r.cpp")     # norm_r.cppというファイルを作成し，下のコードを書き込む
+cat("     # 以下，書き込むファイルの内容
 // Normal distribution with random effects
 
-#include <TMB.hpp>
-#include <iostream>
+#include <TMB.hpp>     // TMBヘッダ
+#include <iostream>     // iostreamヘッダ
 
 template<class Type>
 Type objective_function<Type>::operator() ()
 {
   // DATA //
-  DATA_VECTOR(x);
-  DATA_IVECTOR(ID);
-  DATA_SCALAR(RE);
+  DATA_VECTOR(x);      // データのベクトル
+  DATA_IVECTOR(ID);     // 繰り返し番号を区別する変数
+  DATA_SCALAR(RE);     // ランダム効果のあるなしを操作する変数
   
   // PARAMETER //
-   PARAMETER(m);
-   PARAMETER(log_sigma);
-   PARAMETER(log_tau);
-   PARAMETER_VECTOR(z);
+   PARAMETER(m);     // 平均パラメータ
+   PARAMETER(log_sigma);      // 観測値の標準偏差のパラメータ
+   PARAMETER(log_tau);      // ランダム効果の標準偏差
+   PARAMETER_VECTOR(z);     // ランダム効果
   
   // Main
-  int N = x.size();
-  int M = z.size();
-  Type sigma = exp(log_sigma);
-  Type tau = exp(log_tau);
-  Type nll = 0.0;
+  int N = x.size();     // サンプルサイズ
+  int M = z.size();     // ランダム効果のサイズ
+  Type sigma = exp(log_sigma);     # 観測標準偏差
+  Type tau = exp(log_tau);        // ランダム効果の標準偏差
+  Type nll = 0.0;      // 目的関数
   
-  for (int j=0;j<M;j++) nll -= RE*dnorm(z(j), Type(0.0), tau, true);
-  for (int i=0;i<N;i++) nll -= dnorm(x(i), m+z(ID(i)), sigma, true);
+  for (int j=0;j<M;j++) nll -= RE*dnorm(z(j), Type(0.0), tau, true);     // ランダム効果に関する尤度（RE=0か1で尤度に入れる入れないをコントロール）
+  for (int i=0;i<N;i++) nll -= dnorm(x(i), m+z(ID(i)), sigma, true);     // 観測値の対数尤度
 
-  REPORT(sigma);
-  ADREPORT(tau);
+  REPORT(sigma);     // sigmaをreport
+  ADREPORT(tau);     // tauをadreport（推定値とその標準誤差を表示）
   
-  return nll;
+  return nll;     // 目的関数を返す
 }
-", fill=TRUE)
-sink()
+", fill=TRUE)     # 最後を改行
+sink()      # 外部ファイルとの接続を終了
 
-library(TMB)
-compile("norm_r.cpp")
-dyn.load(dynlib("norm_r"))
+library(TMB)      # TMBパッケージの読み込み
+compile("norm_r.cpp")       # norm_r.cppをコンパイル
+dyn.load(dynlib("norm_r"))     # norm_rのDLLファイル作成
 
-set.seed(1)
-tau <- 0.4
+set.seed(1)     # 乱数のseed
+tau <- 0.4      # tauを0.4とする
 z <- rnorm(5,0,tau)
 ID <- rep(1:5,2)
 x <- 3+z[ID]+rnorm(10,0,0.2)
