@@ -1,0 +1,117 @@
+### 付録：Template Model Builder（TMB）の簡単なガイド
+## インストール
+
+sink("norm.cpp")    # norm.cppというファイルを作成し，下のコードを書き込む
+cat("      # cat内のコードを外部ファイルに書き込み
+// Normal distribution
+
+#include <TMB.hpp>    // TMBのヘッダファイル
+#include <iostream>    // C++の入出力のヘッダファイル
+
+template<class Type>
+Type objective_function<Type>::operator() ()
+{
+  // DATA //
+  DATA_VECTOR(x);     // 入力データ
+  DATA_SCALAR(SD);    // 標準偏差を外から与える
+  
+  // PARAMETER //
+   PARAMETER(m);     // 平均パラメータ
+  
+  // Main
+  int N = x.size();     // xのサンプルサイズ
+  Type nll = 0.0;     // 目的関数
+  
+  for (int i=0;i<N;i++) nll -= dnorm(x(i), m, SD, true);    // 負の対数尤度
+  
+  return nll;    // 目的関数を返す
+}
+", fill=TRUE)     # 最後を改行 
+sink()    # 外部ファイルへの出力終了
+
+library(TMB)     # TMBパッケージの読み込み
+compile("norm.cpp")       # norm.cppをコンパイル
+dyn.load(dynlib("norm"))      # DLLを作成
+
+set.seed(1)     # 乱数のseed設定
+dat <- list(x=rnorm(5,3),SD=1)      # データを作成
+pars <- list(m=0)      # パラメータの初期値
+obj <- MakeADFun(dat, pars, DLL="norm", silent=TRUE)     # 自動微分関数の作成
+mod <- nlminb(obj$par, obj$fn, obj$gr)      # 自動微分した勾配を入れて最適化
+mod$par      # パラメータ推定値
+
+f <- function(m) -sum(dnorm(dat$x,m,1,log=TRUE))    # 負の対数尤度関数
+ff <- function(m,d=0.000001) (f(m+d)-f(m-d))/(2*d)    #  数値微分
+( res0 <- sapply(seq(-2,5), ff) )       # 勾配の値
+( res1 <- sapply(seq(-2,5), function(x) obj$gr(x)) )      # TMBによる勾配の値
+
+## ランダム効果がある場合のコード
+
+sink("norm_r.cpp")
+cat("
+// Normal distribution with random effects
+
+#include <TMB.hpp>
+#include <iostream>
+
+template<class Type>
+Type objective_function<Type>::operator() ()
+{
+  // DATA //
+  DATA_VECTOR(x);
+  DATA_IVECTOR(ID);
+  DATA_SCALAR(RE);
+  
+  // PARAMETER //
+   PARAMETER(m);
+   PARAMETER(log_sigma);
+   PARAMETER(log_tau);
+   PARAMETER_VECTOR(z);
+  
+  // Main
+  int N = x.size();
+  int M = z.size();
+  Type sigma = exp(log_sigma);
+  Type tau = exp(log_tau);
+  Type nll = 0.0;
+  
+  for (int j=0;j<M;j++) nll -= RE*dnorm(z(j), Type(0.0), tau, true);
+  for (int i=0;i<N;i++) nll -= dnorm(x(i), m+z(ID(i)), sigma, true);
+
+  REPORT(sigma);
+  ADREPORT(tau);
+  
+  return nll;
+}
+", fill=TRUE)
+sink()
+
+library(TMB)
+compile("norm_r.cpp")
+dyn.load(dynlib("norm_r"))
+
+set.seed(1)
+tau <- 0.4
+z <- rnorm(5,0,tau)
+ID <- rep(1:5,2)
+x <- 3+z[ID]+rnorm(10,0,0.2)
+dat <- list(x=x, ID=ID-1, RE=1)
+pars <- list(m=0, log_sigma=log(0.2), log_tau=log(0.3), z=rep(0,5))
+obj <- MakeADFun(dat, pars, random="z", DLL="norm_r", silent=TRUE)
+mod <- nlminb(obj$par, obj$fn, obj$gr)
+sdrep <- sdreport(obj)
+mod$par
+
+obj$report()
+summary(sdrep)
+
+dat$RE <- 0
+pars <- list(m=0, log_sigma=log(0.2), log_tau=log(0.4), z=rep(0,5))
+maps <- list(log_tau=factor(NA))
+obj1 <- MakeADFun(dat, pars, map=maps, DLL="norm_r", silent=TRUE)
+mod1 <- nlminb(obj1$par, obj1$fn, obj1$gr)
+sdrep1 <- sdreport(obj1)
+plot(dat$x,pch=16,ylab="x")
+points(mod$par[1]+rep(summary(sdrep)[rownames(summary(sdrep))=="z",1],2),col="red",pch=16)
+points(mod1$par[1]+rep(mod1$par[3:7],2),col="green",pch=16)
+legend("topleft",c("観測値","ランダム効果モデル","ランダム効果なしモデル"), pch=16, col=c("black","red","green"), cex=0.9)
