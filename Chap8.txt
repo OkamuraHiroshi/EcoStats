@@ -6,6 +6,7 @@ library(mvtnorm)       # mvtnormパッケージを読み込む
 library(TMB)         # TMBパッケージを読み込む
 library(tidyverse)       # tidyverseパッケージを読み込む
 load("res_ss.rda")       # 7章で作ったRファイルを読み込む
+set.seed(1)      # 乱数のseedを設定
 mu_p <- sdrep$par.fixed       # 7章の状態空間モデルから推定された固定効果パラメータ
 Sigma_p <- sdrep$cov.fixed       # 状態空間モデルの固定効果の分散共分散
 Cor_p <- cov2cor(Sigma_p)      # 分散共分散行列を相関行列に変換
@@ -54,6 +55,9 @@ Pop_simulator <- function(parms, sdrep, dat, seed0=1, b_max=0.95, b_min=0.05, b_
   list(parms=pars, Umsy=Umsy, n0=n0, n_last=n_last, n0_new=n0_new, n=n, u=u)       # 結果のアウトプット
 }
 pops <- Pop_simulator(gen_par, sdrep, dat_ss)        # 個体群モデルの試算
+
+(1-ilogit(logit(0.2)))^10     # 漁獲からの生残率
+mean((1-ilogit(logit(0.2)+rnorm(10000,0,0.2)))^10)     # 漁獲からの生残率に確率変動を入れて平均をとった場合
 
 mean_n0 <- rowMeans(pops$n0)       # 各年の平均個体数（対数）推定値（シミュレーションで生成されたものを平均したもの）
 ci_n0 <- apply(pops$n0, 1, quantile, probs=c(0.025, 0.975))       # シミュレーションの初期個体数対数値の信頼区間の下限値と上限値を計算
@@ -248,11 +252,11 @@ Future_Sim <- function(Sim_dat, Res_sim, FY=20, Strategy="true", beta=1.0, scale
   
   for (j in 1:FY){        # 将来1年目からFY年目まで
     if (Strategy=="true"){        # 管理戦略の変数StrategyがTRUEとなっていたら
-      U0 <- pmin(as.numeric(ifelse(exp(last(Sim_dat$n)) > 0, beta*pmax(pmin(Umsy,max_u),min_u), 0.00001)),0)          # 最終個体数が正なら真のUmsy値を，そうでなければ0を返す
+      U0 <- pmin(as.numeric(ifelse(exp(last(Sim_dat$n)) > 0, beta*pmax(pmin(Umsy,max_u),min_u), 0.00001)),1)          # 最終個体数が正なら真のUmsy値を，そうでなければ0.00001を返す（betaを大きくして，1を越える場合は1にする）
       Tcat <- U0*as.numeric(ifelse(exp(last(Sim_dat$n)) > 0, exp(Sim_dat$n0_new), 0))       # 最終個体数が正なら真の初期個体数を，そうでなければ0を返すものに，上のU0を掛けて総漁獲尾数を計算
     }
     if (Strategy=="est"){
-      if (Umsy_fixed) U0 <- pmax(pmin(beta*Umsy_ini,max_u),min_u) else U0 <- pmin(as.numeric(ifelse(exp(last(Sim_dat$n)) > 0, pmax(pmin(beta*ilogit(rnorm(m,logit(Umsy)+bias[1],sigmas[1])),max_u),min_u),0.00001)),0)         # Umsy_fixedがTRUEなら固定したbeta*Umsyを．FALSEなら，バイアスと誤差を考慮したうえでbeta*Umsyの推定結果を返す
+      if (Umsy_fixed) U0 <- pmax(pmin(beta*Umsy_ini,max_u),min_u) else U0 <- pmin(as.numeric(ifelse(exp(last(Sim_dat$n)) > 0, pmax(pmin(beta*ilogit(rnorm(m,logit(Umsy)+bias[1],sigmas[1])),max_u),min_u),0.00001)),1)         # Umsy_fixedがTRUEなら固定したbeta*Umsyを．FALSEなら，バイアスと誤差を考慮したうえでbeta*Umsyの推定結果を返す
       N0_new_est <- as.numeric(ifelse(exp(last(Sim_dat$n)) > 0,exp(rnorm(m,Sim_dat$n0_new+bias[2],sigmas[2])),0))          # 最終個体数が正ならバイアスと誤差を考慮したうえで年最初の個体数推定値を返し，そうでなければ0を返す
       Tcat <- U0*N0_new_est        # 総漁獲尾数を計算
     }
