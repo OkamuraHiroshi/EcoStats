@@ -265,8 +265,8 @@ Type objective_function<Type>::operator() ()
       U(i) = CAT(i)/N(i);        // 漁獲率
     }
     U(i) = CppAD::CondExpLe(Type(1.0)-U(i),Type(0.0),Type(0.9999),U(i));       // 漁獲率が1を超えないようにするための制約
-    // CppAD:CondEXpLe(x,y,z,w)で，x <= yなら，zを，そうでなければwを与える
-    // Uは0から1の範囲であり，1を越えることがないようにするため
+    // CppAD:CondEXpLe(x,y,z,w)で，x <= yなら，zを，そうでなければw
+    // を与える．Uは0から1の範囲であり，1を越えないようにするため
     if (END(i)==1){         // 漁獲終了時
       n_last(YEAR(i)) = n(i)+log(Type(1.0)-U(i));        // 最終的な生残個体数の対数値
       N_E(YEAR(i)) = exp(n_last(YEAR(i)));         // 最終的な生残個体数（親個体数）
