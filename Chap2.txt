@@ -47,7 +47,9 @@ for (i in 1:Sim){
   z <- qnorm(1-alpha/2)         # 1-有意水準/2の標準正規の上側確率点
   ci <- c(mean(x)-z*sd(x)/sqrt(n), mean(x)+z*sd(x)/sqrt(n))     # 正規信頼区間
   include <- c(include, ci[1] < 0 & ci[2] > 0)     # 信頼区間が真値を含んでいればTRUE，そうでなければFALSE
-  segments(i, ci[1], i, ci[2], col=ifelse(tail(include,1),"blue",gray(0.3)))    # グラフに信頼区間を上書き
+  segments(i, ci[1], i, ci[2],   
+    col=ifelse(tail(include,1),"blue",gray(0.3)),
+    lty=ifelse(tail(include,1),1,3), lwd=2)      # グラフに信頼区間を上書き
 }
 
 curve(dlnorm, from=0, to=8)      # 対数正規分布の密度関数
