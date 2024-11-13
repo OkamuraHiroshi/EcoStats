@@ -369,7 +369,7 @@ ggplot(out_ss, aes(x = N, y = U)) + theme_bw() +          # Kobe plotを描画
 Obs <- log(delury1$CR)        # 観測されたCPUEの対数値
 Pred <- sum_res[rownames(sum_res)=="pred_n",1]        # CPUEのモデルによる予測値
 dat <- data.frame(Obs=Obs, Pred=Pred, START=factor(delury1$START))       # 観測値と予測値をまとめたもの
-ggplot(dat, aes(x=Obs, y=Pred, color=START))+geom_point()+geom_abline(intercept=0, slope=1, linetype="dashed")+theme_bw()        # 観測と予測値の比較プロット（直線上に載っていると良い）．色を変えて初期個体数とその他個体数を区別
+ggplot(dat, aes(x=Obs, y=Pred, color=START, shape=START))+geom_point()+geom_abline(intercept=0, slope=1, linetype="dashed")+theme_bw()        # 観測と予測値の比較プロット（直線上に載っていると良い）．色を変えて初期個体数とその他個体数を区別
 par_comp <- rbind(par_msy_ss[1,], par_msy, par_msy_ss[1,]/par_msy)       # 状態空間モデルによるMSY関連パラメータと決定論的フォックスモデルによるMSY関連パラメータを比較
 rownames(par_comp) <- c("SS","Fox","Ratio")      # 列の名前を設定
 print(round(par_comp, 3))       # 比較結果を表示
