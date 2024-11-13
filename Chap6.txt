@@ -185,7 +185,7 @@ p1 <- ggplot(data=data.frame(Year=unique(Year), Prob=p(1:Y)),aes(x=Year,y=Prob))
 WE <- c("East","West")       # 東西のラベル
 Loc <- WE[Location[,1]+1]         # 選択された場所が東西どちらだったか
 dat_for_gg <- data.frame(Year=rep(unique(Year),each=SS), num=rep(1:SS,len=nrow(cpue)), Location=Loc, CPUE=cpue[,1])        # プロットに必要なデータをまとめる
-p2 <- ggplot(dat_for_gg, aes(x=Year, y=CPUE, color=Location))+labs(y="log(CPUE)")+geom_point()+theme_bw()+theme(legend.position = c(0.1, 0.25))         # 年に対するCPUEの対数値をプロット（東西どちらで漁獲を行っていたかを色の違いで描画）
+p2 <- ggplot(dat_for_gg, aes(x=Year, y=CPUE, color=Location, shape=Location))+labs(y="log(CPUE)")+geom_point()+theme_bw()+theme(legend.position = c(0.1, 0.25))         # 年に対するCPUEの対数値をプロット（東西どちらで漁獲を行っていたかを色とマークの違いで描画）
 cowplot::plot_grid(p1,p2,nrow=2,align="v")         # 上で作った選択率変化のグラフとCPUE変化の様子を上下に並べて表示
 
 res_nom <- lapply(1:Sim, function(i) lm(cpue[,i]~Year))       # 場所の変化による漁獲効率の違いを無視して減少率を推定するモデル
@@ -226,7 +226,7 @@ pred_tmb <- predict(mod_td2, type="response")         # glmmTMBのベストモ�
 cor(dat$Catch, pred_xgb)       # 観測値とxgboost予測値の相関
 cor(dat$Catch, pred_tmb)       # 観測値とglmmTMB予測値の相関
 dat_pp <- data.frame(Mod=factor(rep(c("xgboost","glmmTMB"),each=nrow(dat)),levels=c("xgboost","glmmTMB")), Obs=rep(dat$Catch,2),Pred=c(pred_xgb, pred_tmb))         # xgboostとglmmTMBを比較するプロットのためのデータ
-ggplot(dat_pp, aes(x=Obs, y=Pred, color=Mod))+geom_point()+theme_bw()       # xgboostとglmmTMB結果の比較プロット
+ggplot(dat_pp, aes(x=Obs, y=Pred, color=Mod, shape=Mod))+geom_point()+theme_bw()       # xgboostとglmmTMB結果の比較プロット
 
 pred0 <- exp(mod_td0$fit$parfull[names(mod_td0$fit$parfull)=="beta"])      # 上のモデルmod_td0による年の効果（固定効果）から計算した個体数指標値
 pred1 <- exp(mod_td1$fit$parfull[names(mod_td1$fit$parfull)=="beta"])      # 上のモデルmod_td1による年の効果（固定効果）から計算した個体数指標値
