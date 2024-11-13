@@ -92,26 +92,26 @@ dyn.load(dynlib("norm_r"))     # norm_rのDLLファイル作成
 
 set.seed(1)     # 乱数のseed
 tau <- 0.4      # tauを0.4とする
-z <- rnorm(5,0,tau)
-ID <- rep(1:5,2)
-x <- 3+z[ID]+rnorm(10,0,0.2)
-dat <- list(x=x, ID=ID-1, RE=1)
-pars <- list(m=0, log_sigma=log(0.2), log_tau=log(0.3), z=rep(0,5))
-obj <- MakeADFun(dat, pars, random="z", DLL="norm_r", silent=TRUE)
-mod <- nlminb(obj$par, obj$fn, obj$gr)
-sdrep <- sdreport(obj)
-mod$par
+z <- rnorm(5,0,tau)     # ランダム効果データを生成
+ID <- rep(1:5,2)       # ランダム効果の番号（1~5）
+x <- 3+z[ID]+rnorm(10,0,0.2)     # データを生成
+dat <- list(x=x, ID=ID-1, RE=1)       # ランダム効果モデルに必要なデータ
+pars <- list(m=0, log_sigma=log(0.2), log_tau=log(0.3), z=rep(0,5))       # ランダム効果モデルのパラメータの初期値
+obj <- MakeADFun(dat, pars, random="z", DLL="norm_r", silent=TRUE)      # TMBのMakeADFunを実行
+mod <- nlminb(obj$par, obj$fn, obj$gr)       # 最適化
+sdrep <- sdreport(obj)       # 推定結果の標準誤差など詳細を取得
+mod$par      # パラメータ推定値を表示
 
-obj$report()
-summary(sdrep)
+obj$report()       # reportに記載されている結果の表示
+summary(sdrep)      # sdreport（標準誤差の計算も含むもの）の結果を表示
 
-dat$RE <- 0
-pars <- list(m=0, log_sigma=log(0.2), log_tau=log(0.4), z=rep(0,5))
-maps <- list(log_tau=factor(NA))
-obj1 <- MakeADFun(dat, pars, map=maps, DLL="norm_r", silent=TRUE)
-mod1 <- nlminb(obj1$par, obj1$fn, obj1$gr)
-sdrep1 <- sdreport(obj1)
-plot(dat$x,pch=16,ylab="x")
-points(mod$par[1]+rep(summary(sdrep)[rownames(summary(sdrep))=="z",1],2),col="red",pch=16)
-points(mod1$par[1]+rep(mod1$par[3:7],2),col="green",pch=16)
-legend("topleft",c("観測値","ランダム効果モデル","ランダム効果なしモデル"), pch=16, col=c("black","red","green"), cex=0.9)
+dat$RE <- 0      #　データの設定で，ランダム効果をなしにする
+pars <- list(m=0, log_sigma=log(0.2), log_tau=log(0.4), z=rep(0,5))      # パラメータの初期値
+maps <- list(log_tau=factor(NA))       # ランダム効果の標準偏差にあたるパラメータは推定対象外にする
+obj1 <- MakeADFun(dat, pars, map=maps, DLL="norm_r", silent=TRUE)      # 自動微分を計算
+mod1 <- nlminb(obj1$par, obj1$fn, obj1$gr)      # 最適化
+sdrep1 <- sdreport(obj1)       # 推定値とその標準誤差
+plot(dat$x,pch=15,ylab="x")      # 観測値の図
+points(mod$par[1]+rep(summary(sdrep)[rownames(summary(sdrep))=="z",1],2),col="red",pch=16)    # ランダム効果モデルの平均の図
+points(mod1$par[1]+rep(mod1$par[3:7],2),col="green",pch=17)       # ランダム効果なしモデルの平均の図
+legend("topleft",c("観測値","ランダム効果モデル","ランダム効果なしモデル"), pch=15:17, col=c("black","red","green"), cex=0.9)      # 凡例
