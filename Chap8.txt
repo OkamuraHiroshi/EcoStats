@@ -1,6 +1,6 @@
 ### 8章  シミュレーションと意思決定科学
 
-## 8 - 1 シミュレーションモデルを作ろう！
+## 8 - 2 シミュレーションモデルの作成
 
 library(mvtnorm)       # mvtnormパッケージを読み込む
 library(TMB)         # TMBパッケージを読み込む
@@ -218,7 +218,7 @@ mB <- Bias_plot(Res_sim, Sim_dat)       # バイアスデータ保存と図の�
 Res_sim1 <- sim2est(Sim_dat, b_fix=TRUE, b_ini=0.8)       # 密度効果パラメータbを0.8で固定
 mB1 <- Bias_plot(Res_sim1, Sim_dat, main="密度効果固定")       # bを固定した場合のバイアスデータ保存と図の表示
 
-## 8 - 2 シミュレーションで将来予測してみよう！
+## 8 - 3 将来予測シミュレーション
 
 make_sigma <- function(Res){         # Umsyと初期個体数の標準誤差を計算する関数
   m <- length(Res)        # Resの個数
@@ -260,125 +260,122 @@ Future_Sim <- function(Sim_dat, Res_sim, FY=20, Strategy="true", beta=1.0, scale
       N0_new_est <- as.numeric(ifelse(exp(last(Sim_dat$n)) > 0,exp(rnorm(m,Sim_dat$n0_new+bias[2],sigmas[2])),0))          # 最終個体数が正ならバイアスと誤差を考慮したうえで年最初の個体数推定値を返し，そうでなければ0を返す
       Tcat <- U0*N0_new_est        # 総漁獲尾数を計算
     }
-    nr <- cp[j+1]-cp[j]
-    U[(cp[j]+1):cp[j+1],] <- matrix(1-(1-U0)^(1/period[j]),nrow=nr,ncol=m,byrow=TRUE)
-    surv[(cp[j]+1):cp[j+1],] <- (1-U[(cp[j]+1):cp[j+1],])^(0:(period[j]-1))
-    US <- U[(cp[j]+1):cp[j+1],]*surv[(cp[j]+1):cp[j+1],]
+    nr <- cp[j+1]-cp[j]      # 年の中の漁獲が行われる週数
+    U[(cp[j]+1):cp[j+1],] <- matrix(1-(1-U0)^(1/period[j]),nrow=nr,ncol=m,byrow=TRUE)      # 各年の漁獲率から各週の漁獲率を計算
+    surv[(cp[j]+1):cp[j+1],] <- (1-U[(cp[j]+1):cp[j+1],])^(0:(period[j]-1))      # 各週の漁獲率をもとに各週の生残率（累積漁獲率分を間引く）を計算
+    US <- U[(cp[j]+1):cp[j+1],]*surv[(cp[j]+1):cp[j+1],]       # その週まで生き残ったという条件のもとで漁獲される確率を計算
 
-    cats <- sapply(1:m, function(i) rmultinom(1,round(Tcat[i]),US[,i]))
-    Cat[(cp[j]+1):cp[j+1],] <- cats
-    ccats <- rbind(0,apply(cats,2,cumsum))
+    cats <- sapply(1:m, function(i) rmultinom(1,round(Tcat[i]),US[,i]))      # 総漁獲尾数から，各週の分を配分．
+    Cat[(cp[j]+1):cp[j+1],] <- cats       # 各週の漁獲尾数
+    ccats <- rbind(0,apply(cats,2,cumsum))       # 各週の累積漁獲尾数（それまでの漁獲の和）を計算
      
-    real_N0 <- matrix(exp(Sim_dat$n0_new),nrow=nr+1,ncol=m,byrow=TRUE)
-    real_N <- real_N0-ccats
-    real_N[real_N < 0] <- 0
-    real_Catch <- ifelse(ccats[2:(nr+1),] > real_N0[2:(nr+1),], real_N[1:nr,], cats)
+    real_N0 <- matrix(exp(Sim_dat$n0_new),nrow=nr+1,ncol=m,byrow=TRUE)       # Sim_datに入っている初期個体数を最初の値に設定
+    real_N <- real_N0-ccats      # 累積漁獲尾数を間引く
+    real_N[real_N < 0] <- 0      # もし漁獲が個体数を超えたら，個体数を0とする
+    real_Catch <- ifelse(ccats[2:(nr+1),] > real_N0[2:(nr+1),], real_N[1:nr,], cats)     # 漁獲が個体数を超えた場合，超えて以降の累積漁獲数は個体数だったとする．
 
-    n0_new <- pop_update(cbind(log_r,b), log(real_N[nr+1,]), eps[j,])
+    n0_new <- pop_update(cbind(log_r,b), log(real_N[nr+1,]), eps[j,])     # 漁獲から最終的に生残した個体数から個体群動態モデルを使って翌年の初期個体数を計算する
 
-    tau <- exp(parms[,"log_tau"])
-    eta <- exp(parms[,"log_eta"])
-    z <- matrix(rnorm(nr*m), nrow=nr, ncol=m)
-    z2 <- rnorm(m)
-    log_cpue <- matrix(NA, nrow=nr, ncol=m)
-    log_q <- log(last(Sim_dat$q))+eta*z2
+    tau <- exp(parms[,"log_tau"])       # CPUEの観測誤差の標準偏差
+    eta <- exp(parms[,"log_eta"])       # 漁具能率の誤差の標準偏差
+    z <- matrix(rnorm(nr*m), nrow=nr, ncol=m)      # CPUEの観測誤差のもととなるもの
+    z2 <- rnorm(m)       # 漁具能率の変動のもととなるもの
+    log_cpue <- matrix(NA, nrow=nr, ncol=m)     # CPUEの入れ物
+    log_q <- log(last(Sim_dat$q))+eta*z2      # 漁具能率の観測値
   
     for (i in 1:nr){
-      log_cpue[i,] <- log_q+log(real_N[i,])+scale_tau*tau*z[i,]
+      log_cpue[i,] <- log_q+log(real_N[i,])+scale_tau*tau*z[i,]      # CPUE（対数スケール）の観測値（本文では使用していないが，scale_tauで観測誤差を変えられるようになっている）
     }
     
-    Sim_dat$YEAR <- c(Sim_dat$YEAR, rep(last(Sim_dat$YEAR)+1,nr))
-    Sim_dat$START <- c(Sim_dat$START, c(1,rep(0,nr-1)))
-    Sim_dat$END <- c(Sim_dat$END, c(rep(0,nr-1),1))
-    Sim_dat$n0 <- rbind(Sim_dat$n0, Sim_dat$n0_new)
-    Sim_dat$n_last <- rbind(Sim_dat$n_last, log(real_N[nr+1,]))
-    Sim_dat$n0_new <- n0_new
-    Sim_dat$n <- rbind(Sim_dat$n, log(real_N[1:nr,]))
-    Sim_dat$u <- rbind(Sim_dat$u, real_Catch/real_N[1:nr,])
-    Sim_dat$cpue <- rbind(Sim_dat$cpue, exp(log_cpue))
-    Sim_dat$catch <- rbind(Sim_dat$catch, real_Catch)
-    Sim_dat$tcat <- rbind(Sim_dat$tcat, Tcat)
-    Sim_dat$q <- rbind(Sim_dat$q, exp(log_q))
+    Sim_dat$YEAR <- c(Sim_dat$YEAR, rep(last(Sim_dat$YEAR)+1,nr))     # 年ラベルの追加
+    Sim_dat$START <- c(Sim_dat$START, c(1,rep(0,nr-1)))     # 漁獲開始時点の追加
+    Sim_dat$END <- c(Sim_dat$END, c(rep(0,nr-1),1))     # 漁獲終了時点の追加
+    Sim_dat$n0 <- rbind(Sim_dat$n0, Sim_dat$n0_new)     # 初期個体数の追加
+    Sim_dat$n_last <- rbind(Sim_dat$n_last, log(real_N[nr+1,]))     # 漁獲後最終個体数の追加
+    Sim_dat$n0_new <- n0_new      # 翌年の個体数予測値の追加
+    Sim_dat$n <- rbind(Sim_dat$n, log(real_N[1:nr,]))       # 各週ごとの個体数の追加
+    Sim_dat$u <- rbind(Sim_dat$u, real_Catch/real_N[1:nr,])      # 漁獲率の追加
+    Sim_dat$cpue <- rbind(Sim_dat$cpue, exp(log_cpue))      # CPUEの追加
+    Sim_dat$catch <- rbind(Sim_dat$catch, real_Catch)      # 漁獲尾数の追加
+    Sim_dat$q <- rbind(Sim_dat$q, exp(log_q))      # 漁具能率の追加
   }
   
-  Sim_dat$tcat <- sapply(1:m, function(i) tapply(Sim_dat$catch[,i], Sim_dat$YEAR, sum))
-  Sim_dat$bias <- bias
-  Sim_dat$sigmas <- sigmas
+  Sim_dat$tcat <- sapply(1:m, function(i) tapply(Sim_dat$catch[,i], Sim_dat$YEAR, sum))     # 総漁獲尾数
+  Sim_dat$bias <- bias      # 漁獲率と個体数のバイアス
+  Sim_dat$sigmas <- sigmas      # 漁獲率と個体数の変動の大きさ
     
-  return(Sim_dat)
+  return(Sim_dat)      # 結果を戻す
 }
 
-tib_pr_opt <- list("tibble.print_max" = 20)
-options(tib_pr_opt)
-b_true <- ilogit(Sim_dat$parms[,"logit_b"])
-log_r_true <- Sim_dat$parms[,"log_r"]
-Neq_true <- exp((log_r_true+(1-b_true)*log(1-b_true))/b_true)
-Base_Stat <- data.frame(
-  MSY=b_true*Neq_true,
-  Nmsy=Neq_true
+# tib_pr_opt <- list("tibble.print_max" = 20)       # tibbleで表示する行数の設定
+# options(tib_pr_opt)        # 表示行数をグローバルに設定
+b_true <- ilogit(Sim_dat$parms[,"logit_b"])       # 密度効果パラメータの真値
+log_r_true <- Sim_dat$parms[,"log_r"]       # 密度独立増加率パラメータの真値
+Neq_true <- exp((log_r_true+(1-b_true)*log(1-b_true))/b_true)      # MSYにあたる個体数の真値
+Base_Stat <- data.frame(       # 真値によるMSYと個体数
+  MSY=b_true*Neq_true,       # MSY
+  Nmsy=Neq_true        # Nmsy
 )
-Res_Fut_Sim <- list()
-beta_range <- seq(0.1,1.2,by=0.1)
-Sim_Stat <- NULL
+Res_Fut_Sim <- list()       # 将来予測結果の入れ物
+beta_range <- seq(0.1,1.2,by=0.1)      # betaを0.1から1.2まで0.1刻みで変える
+Sim_Stat <- NULL       # 将来予測結果の要約の入れ物
 for (i in 1:length(beta_range)){
-  Res_Fut_Sim[[i]] <- Future_Sim(Sim_dat, Res_sim, Strategy="true", beta=beta_range[i], FY=100) 
-  sim_stat <- data.frame(beta=beta_range[i], Catch=as.numeric(last(Res_Fut_Sim[[i]]$tcat)), N=as.numeric(last(exp(Res_Fut_Sim[[i]]$n0))))
-  sim_stat <- sim_stat %>% mutate(RC=Catch/Base_Stat$MSY, RN=N/Base_Stat$Nmsy)
-  Sim_Stat <- rbind(Sim_Stat,sim_stat)
+  Res_Fut_Sim[[i]] <- Future_Sim(Sim_dat, Res_sim, Strategy="true", beta=beta_range[i], FY=100)     # betaを変えたときのシミュレーション（真値を使用して漁獲尾数を計算）
+  sim_stat <- data.frame(beta=beta_range[i], Catch=as.numeric(last(Res_Fut_Sim[[i]]$tcat)), N=as.numeric(last(exp(Res_Fut_Sim[[i]]$n0))))       # 最終年の漁獲尾数と個体数
+  sim_stat <- sim_stat %>% mutate(RC=Catch/Base_Stat$MSY, RN=N/Base_Stat$Nmsy)      # 漁獲尾数と個体数をそれぞれMSYとNmsyで割って相対値に変換
+  Sim_Stat <- rbind(Sim_Stat,sim_stat)      # 結果の保存
   }
-( Table_1 <- Sim_Stat %>% group_by(beta) %>% summarize(mRC=mean(RC), mRN=mean(RN), pE=mean(RN==0)) )
+( Table_1 <- Sim_Stat %>% group_by(beta) %>% summarize(mRC=mean(RC), mRN=mean(RN), pE=mean(RN==0)) )      # 結果を表にして表示
 
-Res_Fut_Sim1_0 <- list()
-beta_range <- seq(0.1,1.2,by=0.1)
-Sim_Stat1_0 <- NULL
+Res_Fut_Sim1_0 <- list()         # 漁獲尾数計算に推定値を使用する将来予測結果の入れ物
+Sim_Stat1_0 <- NULL       # シミュレーション結果の入れ物
 for (i in 1:length(beta_range)){
-  Res_Fut_Sim1_0[[i]] <- Future_Sim(Sim_dat, Res_sim, Strategy="est", beta=beta_range[i], bias=mB, FY=100) 
-  sim_stat1_0 <- data.frame(beta=beta_range[i], Catch=as.numeric(last(Res_Fut_Sim1_0[[i]]$tcat)), N=as.numeric(last(exp(Res_Fut_Sim1_0[[i]]$n0))))
-  sim_stat1_0 <- sim_stat1_0 %>% mutate(RC=Catch/Base_Stat$MSY, RN=N/Base_Stat$Nmsy)
-  Sim_Stat1_0 <- rbind(Sim_Stat1_0,sim_stat1_0)
+  Res_Fut_Sim1_0[[i]] <- Future_Sim(Sim_dat, Res_sim, Strategy="est", beta=beta_range[i], bias=mB, FY=100)        # betaを変えたときのシミュレーション結果（推定結果から漁獲尾数を計算）
+  sim_stat1_0 <- data.frame(beta=beta_range[i], Catch=as.numeric(last(Res_Fut_Sim1_0[[i]]$tcat)), N=as.numeric(last(exp(Res_Fut_Sim1_0[[i]]$n0))))       # 最終年の漁獲尾数と個体数
+  sim_stat1_0 <- sim_stat1_0 %>% mutate(RC=Catch/Base_Stat$MSY, RN=N/Base_Stat$Nmsy)      # 漁獲尾数と個体数をそれぞれMSYとNmsyで割って相対値に変換
+  Sim_Stat1_0 <- rbind(Sim_Stat1_0,sim_stat1_0)      # 結果の保存
   }
-( Table_2 <- Sim_Stat1_0 %>% group_by(beta) %>% summarize(mRC=mean(RC), mRN=mean(RN), pE=mean(RN==0)) )
+( Table_2 <- Sim_Stat1_0 %>% group_by(beta) %>% summarize(mRC=mean(RC), mRN=mean(RN), pE=mean(RN==0)) )      # 結果を表にして表示
 
-Res_Fut_Sim1_1 <- list()
-beta_range <- seq(0.1,1.2,by=0.1)
-Sim_Stat1_1 <- NULL
+Res_Fut_Sim1_1 <- list()         # 漁獲尾数計算に推定値を使用する将来予測結果の入れ物（密度効果は固定）
+Sim_Stat1_1 <- NULL       # 将来予測結果の要約の入れ物
 for (i in 1:length(beta_range)){
-  Res_Fut_Sim1_1[[i]] <- Future_Sim(Sim_dat, Res_sim1, Strategy="est", beta=beta_range[i], bias=mB1, FY=100) 
-  sim_stat1_1 <- data.frame(beta=beta_range[i], Catch=as.numeric(last(Res_Fut_Sim1_1[[i]]$tcat)), N=as.numeric(last(exp(Res_Fut_Sim1_1[[i]]$n0))))
-  sim_stat1_1 <- sim_stat1_1 %>% mutate(RC=Catch/Base_Stat$MSY, RN=N/Base_Stat$Nmsy)
-  Sim_Stat1_1 <- rbind(Sim_Stat1_1,sim_stat1_1)
+  Res_Fut_Sim1_1[[i]] <- Future_Sim(Sim_dat, Res_sim1, Strategy="est", beta=beta_range[i], bias=mB1, FY=100)        # betaを変えたときのシミュレーション結果（推定結果から漁獲尾数を計算．密度効果パラメータを固定）
+  sim_stat1_1 <- data.frame(beta=beta_range[i], Catch=as.numeric(last(Res_Fut_Sim1_1[[i]]$tcat)), N=as.numeric(last(exp(Res_Fut_Sim1_1[[i]]$n0))))       # 最終年の漁獲尾数と個体数
+  sim_stat1_1 <- sim_stat1_1 %>% mutate(RC=Catch/Base_Stat$MSY, RN=N/Base_Stat$Nmsy)      # 漁獲尾数と個体数をそれぞれMSYとNmsyで割って相対値に変換
+  Sim_Stat1_1 <- rbind(Sim_Stat1_1,sim_stat1_1)      # 結果の保存
   }
-( Table_3 <- Sim_Stat1_1 %>% group_by(beta) %>% summarize(mRC=mean(RC), mRN=mean(RN), pE=mean(RN==0)) )
+( Table_3 <- Sim_Stat1_1 %>% group_by(beta) %>% summarize(mRC=mean(RC), mRN=mean(RN), pE=mean(RN==0)) )      # 結果を表にして表示
 
-years <- unique(delury$Year)
-i <- 7
-mcat <- apply(Res_Fut_Sim1_1[[i]]$tcat,1,median)
-lcat <- apply(Res_Fut_Sim1_1[[i]]$tcat, 1, quantile, prob=0.025)
-ucat <-  apply(Res_Fut_Sim1_1[[i]]$tcat, 1, quantile, prob=0.975)
-mN0 <- rowMeans(exp(Res_Fut_Sim1_1[[i]]$n0))
+years <- unique(delury$Year)     # 年のラベルを作成
+i <- 7        # beta=0.7の結果を表示するためi=7とする
+mcat <- apply(Res_Fut_Sim1_1[[i]]$tcat,1,median)          # 漁獲尾数の中央値
+lcat <- apply(Res_Fut_Sim1_1[[i]]$tcat, 1, quantile, prob=0.025)          # 漁獲尾数の下限値
+ucat <-  apply(Res_Fut_Sim1_1[[i]]$tcat, 1, quantile, prob=0.975)          # 漁獲尾数の上限値
+mN0 <- rowMeans(exp(Res_Fut_Sim1_1[[i]]$n0))          # 初期個体数
 
-dat_f1 <- data.frame(Year=c(years, last(years)+1:100), mcat=mcat, mN0=mN0, lcat=lcat, ucat=ucat)
+dat_f1 <- data.frame(Year=c(years, last(years)+1:100), mcat=mcat, mN0=mN0, lcat=lcat, ucat=ucat)       # 結果を図示するためのデータの作成
 
-ggplot(dat_f1, aes(x=Year, y=mcat))+geom_ribbon(aes(ymin=lcat, ymax=ucat),alpha=0.2) + labs(y="Catch / Population Size") + geom_line() + geom_line(aes(x=Year, y=mN0), col="blue", linetype="dashed") + scale_y_log10() + theme_bw()
+ggplot(dat_f1, aes(x=Year, y=mcat))+geom_ribbon(aes(ymin=lcat, ymax=ucat),alpha=0.2) + labs(y="Catch / Population Size") + geom_line() + geom_line(aes(x=Year, y=mN0), col="blue", linetype="dashed") + scale_y_log10() + theme_bw()        # beta=0.7のときの漁獲尾数と個体数の将来予測
 
-## 8 - 3 さまざまな不確実性をシミュレーションの中に入れよう！
+## 8 - 4 不確実性に対する頑健性の評価
 
-prog  <- readLines("delury_ss.cpp")
-prog[21] <- "  PARAMETER(log_b);"
-prog[32] <- "  Type b = exp(log_b);"
-prog[77] <- "  nll += -dnorm(n0(0),tilde_n0,log_b*sigma,true);"
-prog[79] <- "    nll += -dnorm(n0(i),log_r+n_last(i-1)+log(Type(1.0)-n_last(i-1)/log_b),sigma,true);"
-prog[83] <- "  Type Umsy = r/(r+log_b);"
-prog[84] <- "  Type N_eq = b/(1-Umsy)*exp(-log_b/(r*(1-Umsy)));"
-prog[86] <- "  Type N0_new = exp(log_r+n_last(Y-1)+log(Type(1.0)-n_last(Y-1)/log_b));" 
-writeLines(prog, con = "delury_ss2.cpp")
+prog  <- readLines("delury_ss.cpp")        # delury_ssを書き換えるためファイルを読み込み
+prog[21] <- "  PARAMETER(log_b);"       # 変更が必要な箇所の書き換え
+prog[32] <- "  Type b = exp(log_b);"       # 変更が必要な箇所の書き換え
+prog[77] <- "  nll += -dnorm(n0(0),tilde_n0,log_b*sigma,true);"       # 変更が必要な箇所の書き換え
+prog[79] <- "    nll += -dnorm(n0(i),log_r+n_last(i-1)+log(Type(1.0)-n_last(i-1)/log_b),sigma,true);"       # 変更が必要な箇所の書き換え
+prog[83] <- "  Type Umsy = r/(r+log_b);"       # 変更が必要な箇所の書き換え
+prog[84] <- "  Type N_eq = b/(1-Umsy)*exp(-log_b/(r*(1-Umsy)));"       # 変更が必要な箇所の書き換え
+prog[86] <- "  Type N0_new = exp(log_r+n_last(Y-1)+log(Type(1.0)-n_last(Y-1)/log_b));"       # 変更が必要な箇所の書き換え
+writeLines(prog, con = "delury_ss2.cpp")       # 書き換えたプログラムをdelury_ss2.cppとして書き出し
 
-library(TMB)
-compile("delury_ss2.cpp")
-dyn.load(dynlib("delury_ss2"))
+library(TMB)        # TMBパッケージの読み込み
+compile("delury_ss2.cpp")       # delury_ss2.cppをコンパイル
+dyn.load(dynlib("delury_ss2"))       # delury_ss2のDLLを作成
 
-dat_ss2 <- dat_ss
-par_ss2 <- list(
+dat_ss2 <- dat_ss       # delury_ss2のためのデータ
+par_ss2 <- list(        # delury_ss2のためのパラメータの初期値
   log_r=log(4),
   log_b=log(3000),
   tilde_n0=mean(par_ss$n0)+0.5,
@@ -389,51 +386,48 @@ par_ss2 <- list(
   log_q=par_ss$log_q-0.5,
   n0=par_ss$n0+0.5
 )
-obj2 <- MakeADFun(dat_ss2, par_ss2, random=c("log_q","n0"), DLL="delury_ss2", silent=TRUE)
-mod_ss2 <- nlminb(obj2$par, obj2$fn, obj2$gr)
-sdrep2 <- sdreport(obj2)
+obj2 <- MakeADFun(dat_ss2, par_ss2, random=c("log_q","n0"), DLL="delury_ss2", silent=TRUE)       # 自動微分の作成
+mod_ss2 <- nlminb(obj2$par, obj2$fn, obj2$gr)     # 最適化
+sdrep2 <- sdreport(obj2)       # パラメータとその標準誤差の要約
 
-pop_update <- function(p,x,eps) p[,1]+x+log(1-pmin(pmax(x,-1e6)/log(p[,2]),0.999))+eps
+pop_update <- function(p,x,eps) p[,1]+x+log(1-pmin(pmax(x,-1e6)/log(p[,2]),0.999))+eps       # 個体数更新関数をフォックスモデルに変更
 transform_b <- function(pars, b_max, b_min){
-  log_b <- ifelse(pars$log_b < log(b_min), log(b_min),  ifelse(pars$log_b > log(b_max), log(b_max), pars$log_b))
+  log_b <- ifelse(pars$log_b < log(b_min), log(b_min),  ifelse(pars$log_b > log(b_max), log(b_max), pars$log_b))       # 密度効果の制約
   return(log_b)
 }
-make_b <- function(x) exp(x)
-make_Umsy <- function(x,y) exp(x)/(exp(x)+log(y))
-Sim_dat2 <- Simulated_data(dat_ss, sdrep2, b_max=exp(6.7), b_min=exp(5.7), b_type="log_b")
+make_b <- function(x) exp(x)        # 対数bを元のスケールに戻す
+make_Umsy <- function(x,y) exp(x)/(exp(x)+log(y))       # MSYの漁獲率
+Sim_dat2 <- Simulated_data(dat_ss, sdrep2, b_max=exp(6.7), b_min=exp(5.7), b_type="log_b")       # フォックスモデルが真の場合のシミュレーションデータを作成
 
-Res_sim2_0 <- sim2est(Sim_dat2)
-Res_sim2_1 <- sim2est(Sim_dat2,b_fix=TRUE,b_ini=0.8)
-mB2 <- Bias_plot(Res_sim2_0, Sim_dat2)
-mB3 <- Bias_plot(Res_sim2_1, Sim_dat2, main="密度効果固定")
+Res_sim2_0 <- sim2est(Sim_dat2)        # フォックスモデルのシミュレーションデータに線形密度効果モデルをフィット
+Res_sim2_1 <- sim2est(Sim_dat2,b_fix=TRUE,b_ini=0.8)        # フォックスモデルのシミュレーションデータに線形密度効果モデルをフィット（しかし，密度効果は0.8に固定）
+mB2 <- Bias_plot(Res_sim2_0, Sim_dat2)         # 密度効果を推定した場合のバイアスの推定
+mB3 <- Bias_plot(Res_sim2_1, Sim_dat2, main="密度効果固定")         # 密度効果を固定した場合のバイアスの推定
 
-b_true <- exp(Sim_dat2$parms[,"log_b"])
-log_r_true <- Sim_dat2$parms[,"log_r"]
-Umsy_true <-  exp(log_r_true)/(exp(log_r_true)+log(b_true))
-Neq_true <- b_true/(1-Umsy_true)*exp(-log(b_true)/(exp(log_r_true)*(1-Umsy_true)))
-Base_Stat2 <- data.frame(
+b_true <- exp(Sim_dat2$parms[,"log_b"])       # 密度効果パラメータの真値（フォックスモデル）
+log_r_true <- Sim_dat2$parms[,"log_r"]       # 密度独立増加率パラメータの真値（フォックスモデル）
+Umsy_true <-  exp(log_r_true)/(exp(log_r_true)+log(b_true))       # MSYの漁獲率の真値（フォックスモデル）
+Neq_true <- b_true/(1-Umsy_true)*exp(-log(b_true)/(exp(log_r_true)*(1-Umsy_true)))       # MSYの個体数の真値（フォックスモデル）
+Base_Stat2 <- data.frame(      # MSYとNmsyの真値（フォックスモデル）をまとめる
   MSY=Umsy_true*Neq_true,
   Nmsy=Neq_true
 )
-Res_Fut_Sim2_0 <- list()
-beta_range <- seq(0.1,1.2,by=0.1)
-Sim_Stat2_0 <- NULL
+Res_Fut_Sim2_0 <- list()       # 将来予測結果の入れ物
+Sim_Stat2_0 <- NULL        # 将来予測の要約の入れ物
 for (i in 1:length(beta_range)){
-  Res_Fut_Sim2_0[[i]] <- Future_Sim(Sim_dat2, Res_sim2_0, Strategy="est", beta=beta_range[i], bias=mB2, FY=100) 
-  sim_stat2_0 <- data.frame(beta=beta_range[i], Catch=as.numeric(last(Res_Fut_Sim2_0[[i]]$tcat)), N=as.numeric(last(exp(Res_Fut_Sim2_0[[i]]$n0))))
-  sim_stat2_0 <- sim_stat2_0 %>% mutate(RC=Catch/Base_Stat2$MSY, RN=N/Base_Stat2$Nmsy)
-  Sim_Stat2_0 <- rbind(Sim_Stat2_0,sim_stat2_0)
+  Res_Fut_Sim2_0[[i]] <- Future_Sim(Sim_dat2, Res_sim2_0, Strategy="est", beta=beta_range[i], bias=mB2, FY=100)        # betaを変えたときのシミュレーション結果（推定結果から漁獲尾数を計算）
+  sim_stat2_0 <- data.frame(beta=beta_range[i], Catch=as.numeric(last(Res_Fut_Sim2_0[[i]]$tcat)), N=as.numeric(last(exp(Res_Fut_Sim2_0[[i]]$n0))))       # 最終年の漁獲尾数と個体数
+  sim_stat2_0 <- sim_stat2_0 %>% mutate(RC=Catch/Base_Stat2$MSY, RN=N/Base_Stat2$Nmsy)      # 漁獲尾数と個体数をそれぞれMSYとNmsyで割って相対値に変換（この場合，真と推定モデルが異なる）
+  Sim_Stat2_0 <- rbind(Sim_Stat2_0,sim_stat2_0)      # 結果の保存
   }
-( Table_3 <- Sim_Stat2_0 %>% group_by(beta) %>% summarize(mRC=mean(RC), mRN=mean(RN), pE=mean(RN==0)) )
+( Table_3 <- Sim_Stat2_0 %>% group_by(beta) %>% summarize(mRC=mean(RC), mRN=mean(RN), pE=mean(RN==0)) )      # 結果を表にして表示
 
-Res_Fut_Sim2_1 <- list()
-beta_range <- seq(0.1,1.2,by=0.1)
-Sim_Stat2_1 <- NULL
+Res_Fut_Sim2_1 <- list()      # 将来予測結果（密度効果を固定）の入れ物
+Sim_Stat2_1 <- NULL       # 将来予測の要約の入れ物
 for (i in 1:length(beta_range)){
-  Res_Fut_Sim2_1[[i]] <- Future_Sim(Sim_dat2, Res_sim2_1, Strategy="est", beta=beta_range[i], bias=mB3, FY=100) 
-  sim_stat2_1 <- data.frame(beta=beta_range[i], Catch=as.numeric(last(Res_Fut_Sim2_1[[i]]$tcat)), N=as.numeric(last(exp(Res_Fut_Sim2_1[[i]]$n0))))
-  sim_stat2_1 <- sim_stat2_1 %>% mutate(RC=Catch/Base_Stat2$MSY, RN=N/Base_Stat2$Nmsy)
-  Sim_Stat2_1 <- rbind(Sim_Stat2_1, sim_stat2_1)
+  Res_Fut_Sim2_1[[i]] <- Future_Sim(Sim_dat2, Res_sim2_1, Strategy="est", beta=beta_range[i], bias=mB3, FY=100)        # betaを変えたときのシミュレーション結果（密度効果は固定）
+  sim_stat2_1 <- data.frame(beta=beta_range[i], Catch=as.numeric(last(Res_Fut_Sim2_1[[i]]$tcat)), N=as.numeric(last(exp(Res_Fut_Sim2_1[[i]]$n0))))       # 最終年の漁獲尾数と個体数
+  sim_stat2_1 <- sim_stat2_1 %>% mutate(RC=Catch/Base_Stat2$MSY, RN=N/Base_Stat2$Nmsy)      # 漁獲尾数と個体数をそれぞれMSYとNmsyで割って相対値に変換
+  Sim_Stat2_1 <- rbind(Sim_Stat2_1, sim_stat2_1)      # 結果の保存
   }
-( Table_4 <- Sim_Stat2_1 %>% group_by(beta) %>% summarize(mRC=mean(RC), mRN=mean(RN), pE=mean(RN==0)) )
-
+( Table_4 <- Sim_Stat2_1 %>% group_by(beta) %>% summarize(mRC=mean(RC), mRN=mean(RN), pE=mean(RN==0)) )      # 結果を表にして表示
