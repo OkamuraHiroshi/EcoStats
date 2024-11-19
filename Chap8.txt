@@ -208,7 +208,7 @@ Bias_plot <- function(res,dat,main="密度効果推定"){       # バイアス�
 
   mB <- dat_rb %>% group_by(Type) %>% summarize(mB=mean(Bias))         # バイアスの平均
 
-  p1 <- ggplot(dat_rb, aes(x=Type,y=Bias,fill=Type))+geom_boxplot()+theme_bw()+annotate("text", x = c(1,2), y = c(3,3), label = c(round(mean(Umsy_bias),2), round(mean(N0_new_bias),2)), color="blue", size=5, fontface="bold")+ggtitle(main)          # グラフ作成
+  p1 <- ggplot(dat_rb, aes(x=Type,y=Bias,fill=Type))+geom_boxplot()+theme_bw()+annotate("text",x=c(1,2),y=c(3,3),label=c(round(mean(Umsy_bias),2), round(mean(N0_new_bias),2)),color="blue",size=5,fontface="bold")+ggtitle(main)+theme(legend.position="none")         # グラフ作成
 
   print(p1)        # グラフ表示
   return(mB$mB)        # データをアウトプット
