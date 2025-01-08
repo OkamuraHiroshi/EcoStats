@@ -217,7 +217,7 @@ points(exp(mod_p1$estimate), col=gray(0.5), pch=16)      # データごとに平
 parms <- mod_pn1$fit$parfull       # ポアソン正規モデルのパラメータを抽出
 points(exp(parms[names(parms) %in% "b"]), col="blue", pch=18)       # ランダム効果だけを抽出
 abline(h=exp(parms["beta"]), lty=2)      # ポアソン正規の平均パラメータに線を引く
-legend("top",c("Poissson","Poisson-Normal"), pch=c(16,18), col=c(gray(0.5),"blue"), cex=1.2)      # データごとに平均が異なるとしたポアソンモデルに対してポアソン正規モデルはshrinkageをしていることを示すプロット
+legend("top",c("Poisson","Poisson-Normal"), pch=c(16,18), col=c(gray(0.5),"blue"), cex=1.2)      # データごとに平均が異なるとしたポアソンモデルに対してポアソン正規モデルはshrinkageをしていることを示すプロット
 
 ## 4 - 6 ゼロ過多モデル
 
