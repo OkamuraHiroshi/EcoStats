@@ -19,7 +19,7 @@ mod <- lm(Y ~ X1 + X2 - 1, data=dat_kk)       # 線形回帰を実行
 library(reshape2)       # reshape2パッケージを読み込み
 p1 <- sort(mod$coef[1]+seq(-0.5,0.5,by=0.05))       # log rの範囲を設定
 p2 <- sort(mod$coef[2]+seq(-3,3,by=0.1))       # log N0の範囲を設定
-p <- expand.grid(p1=p1,p1=p2)        # log rとlog N0のグリッドを作成
+p <- expand.grid(p1=p1,p2=p2)        # log rとlog N0のグリッドを作成
 rmse <- function(p, dat) {       # RMSEを計算する関数
   p1 <- as.numeric(p[1])       # log_r
   p2 <- as.numeric(p[2])       # log_N0
