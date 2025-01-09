@@ -398,4 +398,4 @@ N2 <- colSums(res2$naa)         # CPUEによってチューニングしたVPAに
 N1 <- N1/N1[1]        # 個体数を比較するために相対値化
 N2 <- N2/N2[1]        # 個体数を比較するために相対値化
 dat_for_plot <- data.frame(Year=as.numeric(rep(colnames(res$naa),2)),Type=factor(rep(c("No tuned","Tuned"),each=nc)),PopSize=c(N1,N2))        # 図を描くためのデータの作成
-ggplot(dat_for_plot, aes(x=Year,y=PopSize,color=Type))+geom_line()+labs(y="Relative Population Size")+geom_hline(yintercept=0.05,linetype="dashed")+theme_bw()        # 2つの方法による年ごとの個体数推定値の比較
+ggplot(dat_for_plot, aes(x=Year,y=PopSize,color=Type,linetype=Type))+geom_line()+labs(y="Relative Population Size")+geom_hline(yintercept=0.05,linetype="dashed")+theme_bw()        # 2つの方法による年ごとの個体数推定値の比較
