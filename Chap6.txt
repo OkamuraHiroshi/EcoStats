@@ -3,7 +3,7 @@
 ## 6 - 1 個体数推定のための調査手法
 
 possum <- read.csv("https://raw.githubusercontent.com/cran/PL.popN/master/data/possum.txt", sep=" ")       # インターネットネット上にあるpossum.txtを取り込む
-summary(possum)       # possumの中身を確認
+head(possum)       # possumの中身を確認
 
 possum$n <- 5-possum$t1     # possumデータから二項分布の試行回数を作成
 possum$z <- possum$y-1      # possumデータから二項分布の成功回数を作成
