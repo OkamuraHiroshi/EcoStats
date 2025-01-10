@@ -80,7 +80,7 @@ bs_med <- apply(bs, 1, median)     # 各行の中央値を計算
 barplot(table(bs_med))     # 中央値のbootstrapサンプルのヒストグラムを描画
 
 p0 <- rowSums(mat)[2]/sum(mat)    #  全体の成熟割合を計算（帰無仮説）
-p_b <- NULL    # ブートストラップ結果の入れ物
+p_b <- NULL    # シミュレーション結果の入れ物
 set.seed(1)    # 乱数のseedを決めることで再現性を確保
 for (i in 1:1000){     # 1000回の繰り返し計算
   p <- table(sample(c(0,1),colSums(mat)[3],prob=c(1-p0,p0),replace=TRUE))    # 帰無仮説に従って，2010年代のデータと同じ観測数の未成熟・成熟個体を作ってやる
