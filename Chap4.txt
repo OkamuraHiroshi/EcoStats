@@ -50,8 +50,10 @@ matplot(x,sapply(1:20, function(i) a+z[i]+b*x),type="l",col="blue",lty=1,xlab="x
 
 ## 4 - 3 数値的最適化
 
+p1 <- par(mgp=c(0.8,0.5,0))      # グラフの軸ラベル位置の設定
 x <- seq(-5,5,by=0.1)      # xの範囲を設定
 plot(x, x^2, xlab="x", ylab="f(x)", type="l", lwd=2, col="blue", xaxt="n", yaxt="n")      # xに対してx^2をプロット
+par(p1)      # 軸ラベル位置をもとに戻す
 
 # 勾配降下法
 L <- function(x) exp(x)-2*x        # ポアソン分布の対数尤度(x = log(lambda)が推定したいパラメータ）
