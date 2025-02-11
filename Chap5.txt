@@ -136,7 +136,7 @@ ggroc(roc_xgb,legacy.axes=TRUE)+xlab("FPR")+ylab("TPR")+ggtitle(paste("AUC =",ro
 
 library(nnet)       # nnetパッケージの読み込み
 res_nn <- nnet(sex~Bwt+Hwt, data=dat_train, size=50, decay=0.25, maxit=100, trace=FALSE)       # ニューラルネットの適用
-pred_nn <- predict(res_nn,dat_test)        # ニューラルネットによる予測値
+pred_nn <- predict(res_nn, dat_test)        # ニューラルネットによる予測値
 roc_nn <- roc(dat_test$Sex, as.numeric(pred_nn))        # ニューラルネットのROCアウトプット
 
 library(kernlab)      # kernlabパッケージの読み込み
