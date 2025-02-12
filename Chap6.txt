@@ -59,7 +59,7 @@ library(Rdistance)          # Rdistanceパッケージの読み込み
 data("sparrowDetectionData")         # sparrowDetectionDataの読み込み
 dat <- sparrowDetectionData          # sparrowDetectionDataをdatにコピー
 dat <- dat %>% mutate(pd=as.numeric(dist))         # pd（垂直横距離を数値化したもの）を新しい変数として追加
-p1 <- ggplot(dat, aes(x=pd, y=..density..))+geom_histogram(position="identity",boundary=0,bins=15)+labs(x="Perpendicular Distance (m)")+theme_bw()      # 垂直横距離の確率分布の図
+p1 <- ggplot(dat, aes(x=pd, y=..density..))+geom_histogram(position="identity", boundary=0, bins=15)+labs(x="Perpendicular Distance (m)")+theme_bw()      # 垂直横距離の確率分布の図
 print(p1)       # 図を表示
 
 x_max <- 120       # 横距離の最大値
