@@ -107,7 +107,7 @@ summary(sdrep)      # sdreport（標準誤差の計算も含むもの）の結�
 
 dat$RE <- 0      #　データの設定で，ランダム効果をなしにする
 pars <- list(m=0, log_sigma=log(0.2), log_tau=log(0.4), z=rep(0,5))      # パラメータの初期値
-maps <- list(log_tau=factor(NA))       # ランダム効果の標準偏差にあたるパラメータは推定対象外にする
+maps <- list(log_tau=factor(NA), z=rep(factor(NA),5))       # ランダム効果の標準偏差にあたるパラメータは推定対象外にする
 obj1 <- MakeADFun(dat, pars, map=maps, DLL="norm_r", silent=TRUE)      # 自動微分を計算
 mod1 <- nlminb(obj1$par, obj1$fn, obj1$gr)      # 最適化
 sdrep1 <- sdreport(obj1)       # 推定値とその標準誤差
