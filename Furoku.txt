@@ -63,10 +63,10 @@ Type objective_function<Type>::operator() ()
   DATA_SCALAR(RE);     // ランダム効果のあるなしを操作する変数
   
   // PARAMETER //
-   PARAMETER(m);     // 平均パラメータ
-   PARAMETER(log_sigma);      // 観測値の標準偏差のパラメータ
-   PARAMETER(log_tau);      // ランダム効果の標準偏差
-   PARAMETER_VECTOR(z);     // ランダム効果
+  PARAMETER(m);     // 平均パラメータ
+  PARAMETER(log_sigma);      // 観測値の標準偏差のパラメータ
+  PARAMETER(log_tau);      // ランダム効果の標準偏差
+  PARAMETER_VECTOR(z);     // ランダム効果
   
   // Main
   int N = x.size();     // サンプルサイズ
