@@ -44,14 +44,14 @@ p2 <- p1 + geom_line(aes(x=x,y=y),linetype="dotted")+geom_line(data=dat_sp,aes(x
 print(p2)       # 図の描画
 
 library(mgcv)       # mgcvパッケージの読み込み
-library(tidymv)       # tidyverse用にmgcv::gamの予測値などを扱うためのパッケージ（注：最近，tidymvはtidygamに変更された）
+library(tidygam)       # tidyverse用にmgcv::gamの予測値などを扱うためのパッケージ
 library(pscl)       # psclパッケージの読み込み
 data(prussian)       # prussianデータの読み込み
 dat <- prussian       # datにprussianをコピー
 res <- gam(y~s(year), data=dat, family=poisson)       # 年を説明変数としてポアソン分布を誤差分布とするgamをフィット 
-pred <- predict_gam(res)         # 予測値の作成（predict_gamはtidymvパッケージの関数）
+pred <- tidygam::predict_gam(res, length_out=49)         # 予測値の作成
 dat2 <- dat %>% group_by(year) %>% summarize(mean_y=mean(y))        # 年ごとの死亡者数の平均値のデータを作成
-ggplot(pred, aes(x=year, y=exp(fit)))+geom_line()+geom_point(data=dat2,aes(x=year,y=mean_y))+labs(x="Year",y="Predicted Value")+theme_bw()      # gamによる予測結果の曲線と観測データを同時にプロットして比較
+ggplot(pred, aes(x=year, y=exp(y)))+geom_line()+geom_point(data=dat2,aes(x=year,y=mean_y))+labs(x="Year",y="Predicted Value")+theme_bw()      # gamによる予測結果の曲線と観測データを同時にプロットして比較
 
 ## 5 - 4 樹木モデル
 
