@@ -44,7 +44,7 @@ p2 <- p1 + geom_line(aes(x=x,y=y),linetype="dotted")+geom_line(data=dat_sp,aes(x
 print(p2)       # 図の描画
 
 library(mgcv)       # mgcvパッケージの読み込み
-library(tidymv)       # tidyverse用にmgcv::gamの予測値などを扱うためのパッケージ
+library(tidymv)       # tidyverse用にmgcv::gamの予測値などを扱うためのパッケージ（注：最近，tidymvはtidygamに変更された）
 library(pscl)       # psclパッケージの読み込み
 data(prussian)       # prussianデータの読み込み
 dat <- prussian       # datにprussianをコピー
