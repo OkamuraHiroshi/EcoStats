@@ -106,12 +106,12 @@ obj$report()       # reportに記載されている結果の表示
 summary(sdrep)      # sdreport（標準誤差の計算も含むもの）の結果を表示
 
 dat$RE <- 0      #　データの設定で，ランダム効果をなしにする
-pars <- list(m=0, log_sigma=log(0.2), log_tau=log(0.4), z=rep(0,5))      # パラメータの初期値
-maps <- list(log_tau=factor(NA), z=rep(factor(NA),5))       # ランダム効果の標準偏差にあたるパラメータは推定対象外にする
+pars <- list(m=0, log_sigma=log(0.2), log_tau=log(0.00001), z=rep(0,5))     # パラメータの初期値
+maps <- list(log_tau=factor(NA))       # ランダム効果の標準偏差にあたるパラメータは推定対象外にする
 obj1 <- MakeADFun(dat, pars, map=maps, DLL="norm_r", silent=TRUE)      # 自動微分を計算
 mod1 <- nlminb(obj1$par, obj1$fn, obj1$gr)      # 最適化
 sdrep1 <- sdreport(obj1)       # 推定値とその標準誤差
 plot(dat$x,pch=15,ylab="x")      # 観測値の図
 points(mod$par[1]+rep(summary(sdrep)[rownames(summary(sdrep))=="z",1],2),col="red",pch=16)    # ランダム効果モデルの平均の図
 points(mod1$par[1]+rep(mod1$par[3:7],2),col="green",pch=17)       # ランダム効果なしモデルの平均の図
-legend("topleft",c("観測値","ランダム効果モデル","ランダム効果なしモデル"), pch=15:17, col=c("black","red","green"), cex=0.9)      # 凡例
+legend("topright",c("観測値","ランダム効果モデル","ランダム効果なしモデル"), pch=15:17, col=c("black","red","green"), cex=0.9)      # 凡例
