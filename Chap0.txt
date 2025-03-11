@@ -5,21 +5,21 @@ head(lakefish)      # 最初の6行を表示
 
 summary(lakefish)      # データの中身の要約を見る
 
-round(tapply(lakefish$C, lakefish$Y, mean),3)     # 年ごとの平均漁獲量
+round(tapply(lakefish$C, lakefish$Y, mean), 3)     # 年ごとの平均漁獲量
 
-round(tapply(lakefish$C/lakefish$E, lakefish$Y, mean),3)      # 年ごとの平均CPUE
+round(tapply(lakefish$C/lakefish$E, lakefish$Y, mean), 3)      # 年ごとの平均CPUE
 
 plot(lakefish$Y, lakefish$C/lakefish$E, xlab="Year", ylab="CPUE")      # 図1
 
 CPUE <- lakefish$C/lakefish$E        # CPUEという変数を作る
-lakefish <- cbind(lakefish,CPUE)       # CPUEを元のデータに結合
+lakefish <- cbind(lakefish, CPUE)       # CPUEを元のデータに結合
 
-CC <- sapply(2008:2017, function(x) cumsum(subset(lakefish,Y==x)$C))     # 年ごとの累積漁獲量を計算
-lakefish <- cbind(lakefish,CC=unlist(CC))       # 累積漁獲量を元のデータに結合
+CC <- sapply(2015:2024, function(x) cumsum(subset(lakefish,Y==x)$C))     # 年ごとの累積漁獲量を計算
+lakefish <- cbind(lakefish, CC=unlist(CC))       # 累積漁獲量を元のデータに結合
 
-lm(CPUE~CC,data=subset(lakefish,Y==2008))      # デルーリー法（線形回帰）
+lm(CPUE~CC,data=subset(lakefish, Y==2015))      # デルーリー法（線形回帰）
 
-delury1 <- function(x,Year=2008, make.plot=FALSE){      # デルーリー法を関数化
+delury1 <- function(x,Year=2015, make.plot=FALSE){      # デルーリー法を関数化
   # 年(Year)のデータを取り出す
   dat1 <- subset(x, Y==Year)
   
@@ -27,7 +27,7 @@ delury1 <- function(x,Year=2008, make.plot=FALSE){      # デルーリー法を�
   dres <- lm(CPUE~CC, data=dat1)
   
   # プロット
-  if (make.plot) plot(dat1$CC, dat1$CPUE,xlab="CC",ylab="CPUE")
+  if (make.plot) plot(dat1$CC, dat1$CPUE, xlab="CC", ylab="CPUE")
   
   # qとN0を推定
   q.hat <- -dres$coef[2]
@@ -40,15 +40,15 @@ delury1 <- function(x,Year=2008, make.plot=FALSE){      # デルーリー法を�
   list(res=dres, pars=pars)
 }
 
-Res.lake <- lapply(2008:2017, function(x) delury1(lakefish,Y=x))        # 各年にデルーリー法を適用
+Res.lake <- lapply(2015:2024, function(x) delury1(lakefish,Y=x))        # 各年にデルーリー法を適用
 
 q <- sapply(1:10, function(i) Res.lake[[i]]$pars[1])       # 各年の漁具能率
 N0 <- sapply(1:10, function(i) Res.lake[[i]]$pars[2])       # 各年の初期資源量
-names(q) <- names(N0) <- 2008:2017       # 年のラベル付与
+names(q) <- names(N0) <- 2015:2024       # 年のラベル付与
 
 par(mfrow=c(1,2))        # 図2
-plot(2008:2017,N0,xlab="Year",ylab="N0")
-plot(2008:2017,q,xlab="Year",ylab="q")
+plot(2015:2024, N0, xlab="Year", ylab="N0")
+plot(2015:2024, q, xlab="Year", ylab="q")
 
 #
 
@@ -69,4 +69,3 @@ rFr <- Fr/Fmsy       # MSYの漁獲率に対する観測魚確率の比
 plot(rN0,rFr,xlim=c(0,2),ylim=c(0,3),xlab="N/Nmsy",ylab="F/Fmsy")      # Kobe plot (図3)
 abline(v=1,lty=2)      # MSYの資源量の線
 abline(h=1,lty=2)      # MSYの漁獲率の線
-
