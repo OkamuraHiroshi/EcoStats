@@ -1,4 +1,7 @@
-#
+## Chapter 0 プロローグ「老人と湖」
+##
+
+# 0.1 老人と湖（個体数推定） 
 
 lakefish <- read.csv("lakefish.csv")    # lakefish.csvを読み込む
 head(lakefish)      # 最初の6行を表示
@@ -50,7 +53,7 @@ par(mfrow=c(1,2))        # 図2
 plot(2015:2024, N0, xlab="Year", ylab="N0")
 plot(2015:2024, q, xlab="Year", ylab="q")
 
-#
+#  0.2 乱獲の先に（個体群モデルによる評価）
 
 TC <- tapply(lakefish$C,lakefish$Y,sum)        #　各年の総漁獲量
 SP <- N0[2:10]-N0[1:9]+TC[1:9]        # 余剰生産量
