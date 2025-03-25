@@ -116,7 +116,8 @@ res       # 結果の表示
 
 # ポアソン分布モデルの最適化関数
 sink("pois.cpp")    # "pois.cpp"というファイルに下のcat内のものを書き込む
-cat("        // " "内のものを書き込みする
+cat("        // ダブルクォテーション内のものを書き込みする
+内のものを書き込みする
 // Poisson distribution
 
 #include <TMB.hpp>      // TMBのヘッダファイル
@@ -160,7 +161,7 @@ res     # 結果の表示
 
 # ポアソン正規分布モデルの最適化関数
 sink("pois_norm.cpp")    # "pois_norm.cpp"というファイルに下のcat内のものを書き込む
-cat("        // " "内のものを書き込みする
+cat("        // ダブルクォテーション内のものを書き込みする
 // Poisson-Normal distribution
 
 #include <TMB.hpp>      // TMBのヘッダファイル
