@@ -200,7 +200,7 @@ p2 <- ggplot(dat1, aes(x=Year, y=q)) + geom_point() + geom_line() + theme_bw()  
 cowplot::plot_grid(p1, p2)       # ２つの図を並べて表示
 
 sink("delury_ss.cpp")        # delury_ss.cppというTMB計算用ファイルを作成し，下のコードを書き込む
-cat("        // " "内のものを書き込みする
+cat("        // ダブルクォーテーション内のものを書き込みする
 
 // State-Space Delury Model
 
