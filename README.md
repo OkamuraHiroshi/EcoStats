@@ -8,4 +8,4 @@ https://www.amazon.co.jp/dp/4320058453?SubscriptionId=AKIAIBX3OSRN6HXD25SQ&tag=k
 
 のプログラムコード，データ，図（カラー版）です．
 
-https://github.com/user-attachments/assets/d1c832c0-9ee2-43c6-987c-7a9ac50e2aca
+(https://github.com/user-attachments/assets/d1c832c0-9ee2-43c6-987c-7a9ac50e2aca)
