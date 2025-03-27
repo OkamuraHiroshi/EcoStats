@@ -7,3 +7,5 @@ ISBN-13 ‏ : ‎ 978-4320058453
 https://www.amazon.co.jp/dp/4320058453?SubscriptionId=AKIAIBX3OSRN6HXD25SQ&tag=kyoritsu-22&linkCode=xm2&camp=2025&creative=165953&creativeASIN=4320058453
 
 のプログラムコード，データ，図（カラー版）です．
+
+https://github.com/user-attachments/assets/d1c832c0-9ee2-43c6-987c-7a9ac50e2aca
