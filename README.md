@@ -8,4 +8,6 @@ https://www.kyoritsu-pub.co.jp/book/b10131193.html
 
 のプログラムコード，データ，図（カラー版）です．
 
+本書未掲載のプロローグ『老人と湖』のPDFも置いてあります（本書のプロトタイプ的なものです）．
+
 ![EcoStats](https://github.com/user-attachments/assets/6c2d178e-53bb-4fc2-8cef-82adccdcc334)
