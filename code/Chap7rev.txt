@@ -1,0 +1,389 @@
+### 7章　個体群動態評価のための統計モデル
+
+## 7 - 1 線形モデルを利用した個体群の評価
+
+library(tidyverse)       # tidyverseパッケージの読み込み
+saiga <- read_csv("Saiga_antelope.csv")        # サイガ個体群データの読み込み
+
+dat1 <- saiga %>% mutate_at(-(1:28), as.numeric) %>% pivot_longer(cols=starts_with("X"), names_prefix="X", names_to="Year",values_to="Pop") %>% mutate_at(vars(Year), as.numeric) %>% mutate_at(vars(Location), as.factor)        # サイガ個体群データを分析しやすいように整形
+tapply(dat1$Pop, dat1$Location, function(x) sum(!is.na(x)))       # 生息場所ごとに個体数カウントがいくつあるかを表示
+
+dat_kk <- subset(dat1, Location=="Kalmykia, Kazakhstan")      # カルムイク/カザフスタンのサイガ個体群データを抽出
+
+year <- dat_kk$Year[which(!is.na(dat_kk$Pop))]       # データがある年だけを抽出
+dat_kk$T <- dat_kk$Year - (min(year)-1)         # 年ラベルを数字に置換（データがある最初の年を1とする）
+dat_kk <- dat_kk %>% mutate(Y=log(Pop)/sqrt(T), X1=sqrt(T), X2=1/sqrt(T))        # 線形回帰のためにデータを整形
+mod <- lm(Y ~ X1 + X2 - 1, data=dat_kk)       # 線形回帰を実行
+( parms <- c(r = as.numeric(exp(mod$coef[1])), N0 = as.numeric(exp(mod$coef[2]))) )      # 回帰係数から増加率と初期個体数を計算
+
+library(reshape2)       # reshape2パッケージを読み込み
+p1 <- sort(mod$coef[1]+seq(-0.5,0.5,by=0.05))       # log rの範囲を設定
+p2 <- sort(mod$coef[2]+seq(-3,3,by=0.1))       # log N0の範囲を設定
+p <- expand.grid(p1=p1,p2=p2)        # log rとlog N0のグリッドを作成
+rmse <- function(p, dat) {       # RMSEを計算する関数
+  p1 <- as.numeric(p[1])       # log_r
+  p2 <- as.numeric(p[2])       # log_N0
+  
+  sqrt(mean((dat$Y-(p1*dat$X1+p2*dat$X2))^2,na.rm=TRUE))       # RMSE
+}
+obj <- matrix(apply(p, 1, rmse, dat=dat_kk), nrow=length(p1))      # パラメータのグリッドに対してRMSEを計算
+dat_c <- melt(obj)        # 行列になっているデータをggplot描画用データに変換
+p1 <- ggplot(dat_c, aes(Var1, Var2, z=value, colour=after_stat(level))) + geom_contour() + labs(x="log(r)", y="log(N0)") + theme_bw() + scale_colour_distiller(palette="PuBu", direction=-1) + annotate("text",mod$coef[1],mod$coef[2],label="X",colour="red")        # RMSEの等高線図を作成
+print(p1)        # 図を描画
+
+r <- parms["r"]       # 増加率
+N0 <- parms["N0"]       # 初期個体数
+dat_kk$Pred <- exp((log(r)*dat_kk$X1+log(N0)*dat_kk$X2)*dat_kk$X1)        # モデルによる予測個体数を計算
+
+ggplot(dat_kk, aes(x=Year, y=Pop))+geom_point()+geom_line(aes(x=Year, y=Pred), color="blue", linetype="dashed")+labs(y="Population Size", title=dat_kk$Location[1])+theme_bw()       # 個体数の観測値と回帰モデルによる予測値を比較するプロット
+
+dat_uk <- subset(dat1, Location=="Ustiurt, Kazakhstan")       # ウスチュルト高原/カザフスタンのサイガ個体群データ
+year <- dat_uk$Year[which(!is.na(dat_uk$Pop))]        # データがある年だけを抽出
+dat_uk$T <- dat_uk$Year - (min(year)-1)          # データがある最初の年を1にする変換
+dat_uk <- dat_uk %>% mutate(Y=log(Pop)/sqrt(T), X1=sqrt(T), X2=1/sqrt(T))       # 回帰のためのデータの整形
+mod_uk <- lm(Y ~ X1 + X2 - 1, data=dat_uk)        # 線形回帰を適用
+r_uk <- exp(mod_uk$coef[1])        # 増加率
+N0_uk <- exp(mod_uk$coef[2])        # 初期個体数
+dat_uk$Pred <- exp((log(r_uk)*dat_uk$X1+log(N0_uk)*dat_uk$X2)*dat_uk$X1)        # 予測値を計算
+ggplot(dat_uk, aes(x=Year, y=Pop))+geom_point()+geom_line(aes(x=Year, y=Pred), color="blue", linetype="dashed")+labs(y="Population Size", title=dat_uk$Location[1])+theme_bw()        # 個体数の観測値と予測値をプロット
+
+## 7 - 2 個体数の将来予測と絶滅確率の推定
+
+var_saiga <- function(T) t(c(T, 1))%*%vcov(mod)%*%c(T, 1)+T*summary(mod)$sigma^2       # T年の対数個体数推定値の分散を計算する関数（デルタ法）
+future_saiga <- function(T,N=1){
+  pnorm(log(N), log(r)*T+log(N0), sqrt(var_saiga(T)))       # T年の対数個体数推定値と分散を与えたとき，個体数log(N)より小さくなる確率を計算
+}
+T_obs <- last(dat_kk$T[!is.na(dat_kk$Pop)])        # 個体数観測値が入った年の最後の値を抽出
+Prob_extinction <- sapply(c(16,26,100),function(t) future_saiga(t+T_obs,N=1))        # 16年後，26年後，100年後，個体数が閾値（N=1）を下回る確率を計算
+names(Prob_extinction) <- paste0("Time = ",c(16,26,100))       # 絶滅確率の結果の名前を設定
+Prob_extinction        # 絶滅確率計算結果を表示
+
+P_ext <- NULL      # 閾値を変えたときの絶滅確率を記録する入れ物
+for (N in c(1,50,500,5000)){        # 閾値の変化
+  Prob_extinction <- sapply(c(16,26,100),function(t) future_saiga(t+T_obs,N=N))      # 16，26，100年後の絶滅確率
+  P_ext <- rbind(P_ext, Prob_extinction)       # 閾値を変えたものを積み重ねていく
+}
+colnames(P_ext) <- paste0("Time = ",c(16,26,100))       # 列は将来予測の年数
+rownames(P_ext) <- paste0("N* = ",c(1,50,500,5000))       # 行は閾値の違い
+P_ext       # 絶滅確率表の表示
+
+Future_mean_Pop <- exp(log(r)*(T_obs+1:100)+log(N0))       # 過去と将来の平均個体数
+Future_lo_Pop <- sapply(1:100, function(i) exp(log(r)*(T_obs+i)+log(N0)-qnorm(0.975)*sqrt(var_saiga(T_obs+i))))        # 個体数推定値の2.5%点（予測区間の下限）
+Future_up_Pop <- sapply(1:100, function(i) exp(log(r)*(T_obs+i)+log(N0)+qnorm(0.975)*sqrt(var_saiga(T_obs+i))))        # 個体数推定値の97.5%点（予測区間の上限）
+
+Future_proj <- data.frame(Year=dat_kk$Year[dat_kk$T==T_obs]+1:100, Mean=Future_mean_Pop, Lo=Future_lo_Pop, Up=Future_up_Pop)        # 将来予測結果を表示するためのデータセット
+
+ggplot(Future_proj, aes(x=Year, y=Mean))+geom_ribbon(aes(ymin=Lo, ymax=Up),alpha=0.2) + labs(y="Population Size") + geom_hline(yintercept=5000,linetype="dashed")+geom_line(color="blue",linewidth=1.2)+theme_bw()      # 個体数の予測値の変化（95%予測区間付き）．赤点線はN=5000．
+
+## 7 - 3　非線形モデルと密度効果
+
+var_saiga2 <- function(T) t(c(T, 1))%*%vcov(mod_uk)%*%c(T, 1)+T*summary(mod_uk)$sigma^2      # ウスチュルト高原/カザフスタンのT年のサイガ個体数の分散を計算する関数（デルタ法）
+future_saiga2 <- function(T,N=1){        
+  pnorm(log(N), log(r_uk)*T+log(N0_uk), sqrt(var_saiga2(T)))      # T年後にウスチュルト高原/カザフスタンのサイガ個体数が閾値を下回る確率を計算する関数
+}
+T_obs2 <- last(dat_uk$T[!is.na(dat_uk$Pop)])        # 個体数観測値が入った年の最後の値を抽出
+Prob_extinction2 <- sapply(c(16,26,100),function(t) future_saiga(t+T_obs2,N=1))        # 16年後，26年後，100年後，個体数が閾値を下回る確率を計算
+names(Prob_extinction2) <- paste0("Time = ",c(16,26,100))       # 絶滅確率の結果の名前を設定
+Future_mean_Pop2 <- exp(log(r_uk)*(T_obs2+1:100)+log(N0_uk))       # 過去と将来の平均個体数
+Future_lo_Pop2 <- sapply(1:100, function(i) exp(log(r_uk)*(T_obs2+i)+log(N0_uk)-qnorm(0.975)*sqrt(var_saiga(T_obs2+i))))        # 個体数推定値の2.5%点
+Future_up_Pop2 <- sapply(1:100, function(i) exp(log(r_uk)*(T_obs2+i)+log(N0_uk)+qnorm(0.975)*sqrt(var_saiga(T_obs2+i))))        # 個体数推定値の97.5%点
+
+Future_proj2 <- data.frame(Year=dat_uk$Year[dat_uk$T==T_obs2]+1:100, Mean=Future_mean_Pop2, Lo=Future_lo_Pop2, Up=Future_up_Pop2)        # 将来予測結果を表示するためのデータセット
+
+ggplot(Future_proj2, aes(x=Year, y=Mean))+geom_ribbon(aes(ymin=Lo, ymax=Up),alpha=0.2) + labs(y="Population Size") + geom_hline(yintercept=5000,linetype="dashed")+geom_line(color="blue",linewidth=1.5)+scale_y_log10()+theme_bw()      # 個体数の予測値の変化（95%予測区間付き）
+
+paurelia <- c(17, 29, 39, 63, 185, 258, 267, 392, 510, 570, 650, 560, 575, 650, 550, 480, 520, 500)      # ゾウリムシのデータ
+names(paurelia) <- 1:length(paurelia)-1        # 日にちのラベルを設定
+plot(as.numeric(names(paurelia)), paurelia, pch=16, xlab="日", ylab="個体数")        # ゾウリムシ個体数変化の図
+
+dat_p <- paurelia %>% as.data.frame %>% rename("N"=1) %>% rownames_to_column("Time")        # ゾウリムシデータをデータフレームに変換
+n <- nrow(dat_p)       # サンプルサイズ
+N2 <- dat_p$N[2:n]         # N_{t+1}にあたる個体数の時系列
+N1 <- dat_p$N[1:(n-1)]        # N_tにあたる個体数の時系列
+mod_l <- nls(N2~N1+r*N1*(1-N1/K), start=list(r=0.5, K=600))         # 非線形最小二乗法によってロジスティックモデルを適用
+( params <- c(r=summary(mod_l)$coef[1,1], K=summary(mod_l)$coef[2,1]) )         # 回帰係数から増加率と環境収容量を計算
+plot(N1, N2, xlab=expression(N[t]), ylab=expression(N[t+1]), pch=16)       # N_tに対するN_{t+1}のプロット
+lines(N1, predict(mod_l), col="blue", lwd=2)        # ロジスティックモデルによる予測値
+
+dd_saiga <- function(p, dat, b_fix=FALSE, b0=0.9){        # サイガデータで密度効果を入れた予測モデルの誤差の二乗和を計算する関数
+  dat <- subset(dat, !is.na(Pop))        # 観測値があるデータだけを使用
+  Y <- log(dat$Pop)      # 応答変数
+  T <- dat$T       # 時間
+  
+  log_r <- p[1]       # log_r
+  log_N0 <- p[2]        # log_N0
+  if (b_fix) b <- b0 else b <- 1/(1+exp(-p[3]))       # 密度効果パラメータ b
+    
+  Delta <- (1-b^2)/(1-(b^(2*T)))             # 二乗和の重み
+  sum(Delta*(Y -((1-b^T)/(1-b)*log_r + b^T*log_N0))^2)       # 残差の二乗和（最小化すべき目的関数）
+}
+res <- nlm(dd_saiga, c(0,12), dat=dat_kk, b_fix=TRUE, b0=0.9, iterlim=100)       # 最適化（bをgivenとする）
+( parms <- c(r=exp(res1$estimate[1]), N0=exp(res1$estimate[2]), b=1/(1+exp(-logit(0.9)))) )        # 各パラメータの推定値・仮定値
+
+r <- parms["r"]        # 増加率
+N0 <- parms["N0"]         # 初期個体数
+b <- parms["b"]        # 密度効果
+Pred2 <- exp((1-b^dat_kk$T)/(1-b)*log(r)+b^dat_kk$T*log(N0))        # 密度効果モデルによる個体数の予測値
+dat_kk$Pred2 <- ifelse(dat_kk$T < 0,NA,Pred2)       # 予測する範囲を制限 
+ggplot(dat_kk, aes(x=Year, y=Pop))+geom_point()+geom_line(aes(x=Year, y=Pred2), color="blue", linetype="dashed")+labs(y="Population Size", title=dat_kk$Location[1])+theme_bw()
+        # 密度効果モデルによる個体数予測値のプロット
+
+## 7 - 4 最大持続生産量
+
+delury <- read.csv("DeLury.csv")         # 6章で使用したデルーリー法のデータを読み込み
+delury <- delury %>% mutate(Cat=Catch/Mass, CR=CPUE/Mass)        # 平均重量（Mass）で割ってやることにより個体数に変換
+TC <- delury %>% group_by(Year) %>% summarize(TC=sum(Cat))        # 各年の累積漁獲尾数を計算
+del_res <- lapply(1987:2000, function(i) lm(CR~cumsum(Cat),data=subset(delury, Year==i)))        # 各年ごとにデルーリー法（線形回帰）を適用
+lm_res <- sapply(1:length(del_res), function(i) c(-del_res[[i]]$coef[2], -del_res[[i]]$coef[1]/del_res[[i]]$coef[2]))        # 各年の漁獲効率と初期個体数
+lm_res <- rbind(lm_res, TC$TC)        # 累積漁獲尾数の列を追加
+lm_res <- as.data.frame(t(lm_res))       # 結果をまとめたものをデータフレーム化
+names(lm_res) <- c("q","N0","Catch")       # 列名を指定
+rownames(lm_res) <- 1987:2000        # 行名（年）を指定
+
+obj <- function(p, dat, model="logistic", dd=10^(-6)){       # 初期個体数にロジスティックモデルまたはフォックスモデルを適用する最適化関数
+  r <- exp(p[1])       # 増加率
+  K <- exp(p[2])       # 環境収容量
+  
+  nT <- nrow(dat)       # サンプルサイズ（年数）
+  
+  N <- dat$N0         # 初期個体数
+  Cat <- dat$Catch        # 総漁獲尾数
+  
+  like <- 0        # 目的関数の入れ物
+  for (i in 1:(nT-1)){
+    if (model=="logistic") like <- like + (log(N[i+1]) - log(max(N[i]+r*N[i]*(1-N[i]/K)-Cat[i],dd)))^2       # ロジスティックモデルの場合の最小二乗法の目的関数
+    if (model=="fox") like <- like + (log(N[i+1]) - log(max(N[i]+r*N[i]*(1-log(N[i])/log(K))-Cat[i],dd)))^2       # フォックスモデルの場合の最小二乗法の目的関数
+  }
+
+  like       # 目的関数のアウトプット
+}
+
+dat <- lm_res       # 線形回帰の結果のデータをdatにコピー
+p0 <- c(log(mean(dat$Catch/dat$N0)), log(max(dat$N0)))       # 増加率と環境収容量の対数値の初期値を設定
+mod_log <- nlm(obj, p0, dat=dat, model="logistic")         # ロジスティックモデルのフィット
+mod_fox <- nlm(obj, p0, dat=dat, model="fox")          # フォックスモデルのフィット
+print(c(sse_log=mod_log$minimum, sse_fox=mod_fox$minimum), 3)         # ロジスティックモデルとフォックスモデルの目的関数の値を比較
+
+parms <- exp(mod_fox$estimate)        # フォックスモデルのパラメータ推定値を抽出
+names(parms) <- c("r", "K")        # 名前をつける
+par_msy <- c(Fmsy=as.numeric(parms["r"]/log(parms["K"])), Nmsy=as.numeric(parms["K"]/exp(1)), MSY=as.numeric(parms["r"]*parms["K"]/(exp(1)*log(parms["K"]))))        # 増加率と環境収容量からF_{MSY}，N_{MSY}，MSYを計算
+print(par_msy, 2)　　　　　# MSY関連パラメータの推定結果を表示
+
+rel_N <- dat$N0/par_msy["Nmsy"]      # 初期個体数の推定値をMSYの個体数で割って相対値にしたもの
+rel_F <- (dat$Catch/dat$N0)/par_msy["Fmsy"]       # 漁獲率をMSYの漁獲率で割って相対値にしたもの
+out_fox <- data.frame(Y=as.numeric(rownames(dat)), N=rel_N, U=rel_F)        # 年と個体数/漁獲率の相対値をひとつにしたデータセット
+min_Y <- min(out_fox$Y)         # データの開始年
+max_Y <- max(out_fox$Y)         # データの最終年
+ggplot(out_fox, aes(x = N, y = U)) + theme_bw() +
+  geom_rect(xmin = 1, xmax = 2, ymin = 0, ymax = 1, fill = 'green', alpha = 0.05) +
+  geom_rect(xmin = 0, xmax = 1, ymin = 1, ymax = 2, fill = 'red', alpha = 0.05) +
+  geom_rect(xmin = 0, xmax = 1, ymin = 0, ymax = 1, fill = 'yellow', alpha = 0.05) + 
+  geom_rect(xmin = 1, xmax = 2, ymin = 1, ymax = 2, fill = 'orange', alpha = 0.05) + 
+  geom_path(linetype = 2, linewidth = 0.4) +
+  geom_point(aes(size=Y, fill=Y), shape = 21) +
+  scale_fill_continuous(limits=c(min_Y,max_Y),breaks=seq(min_Y,max_Y)) + 
+  scale_size_continuous(limits=c(min_Y,max_Y),breaks=seq(min_Y,max_Y)) +
+  labs(y="Fishing Rate", x="Population Size", fill="Year", size="Year") +
+  guides(fill= guide_legend(), size=guide_legend()) +
+  scale_y_continuous(limits=c(0,2)) + scale_x_continuous(limits=c(0,2))         # Kobeプロット（資源状態の診断プロット）の描画
+
+N0 <- lm_res$N0        # 初期個体数
+Cat <- lm_res$Catch        # 総漁獲尾数
+r <- parms["r"]        # 増加率
+K <- parms["K"]        # 環境収容量
+N1_pred <- N0+r*N0*(1-log(N0)/log(K))-Cat       # フォックスモデルによる予測値
+dat_fox <- data.frame(Obs=log(N0[-1]), Pred=log(N1_pred[-length(N0)]))        # 初期個体数の時系列（観測値）とフォックスモデルの予測値を並べる
+ggplot(dat_fox, aes(x=Obs, y=Pred))+geom_point()+geom_abline(intercept=0, slope=1, linetype="dashed")+xlim(5,7.5)+ylim(5,7.5)+theme_bw()        # 観測値と予測値を比較
+
+## 7 - 5 状態空間モデル
+
+dat1 <- lm_res %>% rownames_to_column("Year") %>% mutate_at(vars(Year), as.numeric)       # lm_resデータの行ラベル（年）を新しく年とし，それを数値データにしたものをdat1とする
+p1 <- ggplot(dat1, aes(x=Year, y=N0)) + geom_point() + geom_line() + ylim(0, 1600) + theme_bw()        # 年に対する初期個体数の変化をプロット
+p2 <- ggplot(dat1, aes(x=Year, y=q)) + geom_point() + geom_line() + theme_bw()        # 年に対する漁獲効率の変化をプロット
+cowplot::plot_grid(p1, p2)       # ２つの図を並べて表示
+
+sink("delury_ss.cpp")        # delury_ss.cppというTMB計算用ファイルを作成し，下のコードを書き込む
+cat("        // ダブルクォーテーション内のものを書き込みする
+
+// State-Space Delury Model
+
+#include <TMB.hpp>      // TMBのヘッダファイル
+#include <iostream>      // Cppの入出力に関するヘッダファイル
+
+template<class Type>      // TMBのテンプレートですよという指定
+Type objective_function<Type>::operator() ()
+{
+  // DATA //
+  DATA_VECTOR(CPUE);      // CPUEの時系列データ
+  DATA_VECTOR(CAT);      // 漁獲尾数の時系列データ
+  DATA_IVECTOR(YEAR);      // 年
+  DATA_IVECTOR(START);      // 年内の開始時点を示す変数
+  DATA_IVECTOR(END);      // 年内の終了時点を示す変数
+  DATA_INTEGER(Y);      // 年数
+  
+  // PARAMETER //
+  PARAMETER(log_r);      // 増加率の対数値にあたるパラメータ
+  PARAMETER(logit_b);      // 密度効果の対数値にあたるパラメータ
+  PARAMETER(tilde_n0);      // 初期個体数の対数値にあたるパラメータ
+  PARAMETER(log_tilde_q);      // 初期漁獲効率の対数値の平均にあたるパラメータ
+  PARAMETER(log_sigma);      // 個体数変動（標準偏差）の対数値のパラメータ
+  PARAMETER(log_tau);      // CPUE変動の対数値のパラメータ
+  PARAMETER(log_eta);      // 漁獲効率変動の対数値のパラメータ
+  PARAMETER_VECTOR(log_q);      // 漁獲効率の対数値（ランダム効果）
+  PARAMETER_VECTOR(n0);      // 初期個体数の対数値（ランダム効果）
+  
+  // PARAMETER TRANSFORMATION //
+  Type r = exp(log_r);       // 増加率の対数値を増加率に変換
+  Type b = Type(1.0)/(Type(1.0)+exp(-logit_b));       // 0 < b < 1に変換
+  Type sigma = exp(log_sigma);       // sigmaに変換
+  Type tau = exp(log_tau);        // tauに変換
+  Type eta = exp(log_eta);        // etaに変換
+  int T = CPUE.size();        // 年*週に対応するサンプルサイズ
+  
+  vector<Type> q(Y);       // 漁獲効率
+  vector<Type> n_last(Y);      // 漁期最後の個体数（対数値）
+  vector<Type> N_S(Y);      // 漁期開始時の個体数
+  vector<Type> N_E(Y);      // 漁期最後の個体数
+  vector<Type> U(T);       // 漁獲率
+  vector<Type> n(T);       // [年, 週]の個体数（対数値）
+  vector<Type> N(T);       // [年, 週]の個体数（対数変換なし）
+  vector<Type> pred_n(T);       // モデルによる [年, 週]の個体数（対数値）の予測値
+     
+  Type nll = 0.0;       // 目的関数の入れ物
+      
+  // DeLury Model
+  
+  for (int i=0;i<T;i++){
+    if (START(i)==1) {         // 漁獲開始時
+      if (i==0) nll += -dnorm(log_q(YEAR(i)),log_tilde_q,eta,true);        // 1番最初の年の漁獲効率
+      if (i > 0) nll += -dnorm(log_q(YEAR(i)),log_q(YEAR(i)-1),eta,true);           // 2年目以降の漁獲効率（ランダムウォーク）
+      n(i) = n0(YEAR(i));        // 漁獲開始時の個体数の対数値
+      N(i) = exp(n(i));         // 漁獲開始時の個体数
+      N_S(YEAR(i)) = N(i);        // 漁獲開始時の個体数
+      U(i) = CAT(i)/N(i);        // 漁獲率
+    }
+    if (START(i)==0) {
+      n(i) = n(i-1)+log(Type(1.0)-U(i-1));       // 漁獲から生き残った個体数の対数値
+      N(i) = exp(n(i));         // 漁獲から生き残った個体数
+      U(i) = CAT(i)/N(i);        // 漁獲率
+    }
+    U(i) = CppAD::CondExpLe(Type(1.0)-U(i),Type(0.0),Type(0.9999),U(i));       // 漁獲率が1を超えないようにするための制約
+    // CppAD:CondEXpLe(x,y,z,w)で，x <= yなら，zを，そうでなければw
+    // を与える．Uは0から1の範囲であり，1を越えないようにするため
+    if (END(i)==1){         // 漁獲終了時
+      n_last(YEAR(i)) = n(i)+log(Type(1.0)-U(i));        // 最終的な生残個体数の対数値
+      N_E(YEAR(i)) = exp(n_last(YEAR(i)));         // 最終的な生残個体数（親個体数）
+    }
+
+    pred_n(i) = log_q(YEAR(i))+n(i);          // モデルから予測される対数個体数の相対値
+    nll += -dnorm(log(CPUE(i)),pred_n(i),tau,true);         // 観測モデルの負の対数尤度
+  }
+  
+  // Density-Dependent Model
+  
+  nll += -dnorm(n0(0),tilde_n0,sigma/b,true);       // 最初の年の漁獲開始時の対数個体数推定値
+  for (int i=1;i<Y;i++){
+    nll += -dnorm(n0(i),log_r+(Type(1.0)-b)*n_last(i-1),sigma,true);        // 密度効果を考慮した漁獲開始時個体数の動態モデル
+  }
+  
+  q = exp(log_q);        // 漁獲効率
+  Type Umsy = b;        // MSYにあたる漁獲率
+  Type N_eq = exp((log_r+(Type(1.0)-b)*log(Type(1.0)-b))/b);       // MSYにあたる個体数
+  Type MSY = Umsy*N_eq;         // MSY
+  Type N0_new = exp(log_r+(Type(1.0)-b)*n_last(Y-1));        // 翌年の漁獲前の個体数の予測値
+  
+  // ADREPORTS
+  
+  ADREPORT(r);        // 増加率の推定値と標準誤差をレポート（=ADREPORT）させる
+  ADREPORT(b);        // 密度効果のADREPORT
+  ADREPORT(sigma);        // プロセス標準偏差のADREPORT
+  ADREPORT(tau);         // 観測誤差のADREPORT
+  ADREPORT(eta);         // 漁獲効率の誤差のADREPORT
+  ADREPORT(q);         // 漁獲効率のADREPORT
+  ADREPORT(U);         // 漁獲率のADREPORT
+  ADREPORT(N_S);         // 漁獲開始時の個体数のADREPORT
+  ADREPORT(N_E);         // 漁獲終了時の個体数のADREPORT
+  ADREPORT(Umsy);         // MSYの漁獲率のADREPORT
+  ADREPORT(N_eq);         // MSYの個体数のADREPORT
+  ADREPORT(MSY);         // MSYのADREPORT
+  ADREPORT(pred_n);        // 個体数の対数値の予測値のADREPORT
+  ADREPORT(N);         // 個体数のADREPORT
+  ADREPORT(N0_new);       // 最終年翌年の個体数推定値のADREPORT
+    
+  return nll;       // 目的関数
+}
+", fill=TRUE)      # 最後を改行
+sink()     # 外部ファイルへのアクセスを終了
+
+library(TMB)       # TMBパッケージを読み込み
+compile("delury_ss.cpp")       # delury_ss.cpp（上で作ったTMBコード）をコンパイル
+dyn.load(dynlib("delury_ss"))       # delury_ssのDLLを作成
+
+delury1 <- delury %>% mutate(Y=Year-min(Year)) %>%
+group_by(Year) %>% mutate(W=Week-min(Week), START=(W==0), END=(W==max(W)))      # deluryデータを整形
+nY <- max(delury1$Y)+1        # 年数
+dat_ss <- list(CPUE=delury1$CR, CAT=delury1$Cat, YEAR=delury1$Y, START=as.numeric(delury1$START), END=as.numeric(delury1$END), Y=nY)       # delury_ssのインプットデータ
+par_ss <- list(         # delury_ssのパラメータの初期値
+  log_r=log(6),
+  logit_b=0,
+  tilde_n0=mean(log(lm_res$N0)),
+  log_tilde_q=mean(log(lm_res$q)),
+  log_sigma=log(0.2),
+  log_tau=log(0.2),
+  log_eta=log(0.2),
+  log_q=log(lm_res$q),
+  n0=log(lm_res$N0)
+)
+obj <- MakeADFun(dat_ss, par_ss, random=c("log_q","n0"), DLL="delury_ss")      # 自動微分による勾配関数などを含む目的関数を作成する
+mod_ss <- nlminb(obj$par, obj$fn, obj$gr)       # 数値的最適化（勾配を与えていることに注意）
+sdrep <- sdreport(obj)       # 分散共分散などの情報を得るためのもの
+
+sum_res <- summary(sdrep)       # 通常のパラメータ（fixed effectsとrandom effects）やADREPORTで指定したものの推定値と標準誤差を表示
+N0 <- sum_res[rownames(sum_res)=="N_S",]        # 漁獲開始時の個体数
+q <- sum_res[rownames(sum_res)=="q",]         # 漁獲効率
+r <- sum_res[rownames(sum_res)=="r",]         # 増加率
+TC <- unlist((delury1 %>% group_by(Year) %>% summarize(TC=sum(Cat)))[,2])      # 総漁獲尾数
+ss_res <- data.frame(q=q[,1], N0=N0[,1], U=TC/N0[,1])        # 漁獲効率，初期個体数推定値，漁獲率をまとめたデータ
+par_msy_ss <- cbind("Umsy"=sum_res[rownames(sum_res)=="b",],"Nmsy"=sum_res[rownames(sum_res)=="N_eq",],"MSY"=sum_res[rownames(sum_res)=="MSY",]) %>% as.data.frame()       # MSYにあたる生物学的基準値をまとめる
+Year <- as.numeric(rownames(lm_res))       # 年のラベル
+rownames(ss_res) <- Year       # 年のラベルを行名に
+p1 <- ggplot(lm_res, aes(x=Year,y=N0))+geom_point()+geom_line(data=ss_res, aes(x=Year,y=N0),color="blue")+ylim(0, 1600)+theme_bw()        # 年に対する初期個体数推定値の変化
+p2 <- ggplot(lm_res, aes(x=Year,y=q))+geom_point()+geom_line(data=ss_res, aes(x=Year,y=q),color="blue")+theme_bw()        # 年に対する漁獲効率の変化
+cowplot::plot_grid(p1,p2)        # 2つの図を並べる
+
+rel_N <- ss_res$N0/par_msy_ss["Nmsy"][1,]        # 相対個体数（N/N_msy）
+rel_U <- ss_res$U/par_msy_ss["Umsy"][1,]        # 相対個体数（U/U_msy）
+out_ss <- data.frame(Y=as.numeric(rownames(ss_res)), N=rel_N, U=rel_U)       # 元のスケールの個体数や漁獲率のデータに相対値のデータを追加
+min_Y <- min(out_ss$Y)       # 年の最小値
+max_Y <- max(out_ss$Y)       # 年の最大値
+ggplot(out_ss, aes(x = N, y = U)) + theme_bw() +          # Kobe plotを描画
+  geom_rect(xmin = 1, xmax = 3, ymin = 0, ymax = 1, fill = 'green', alpha = 0.05) +
+  geom_rect(xmin = 0, xmax = 1, ymin = 1, ymax = 2, fill = 'red', alpha = 0.05) +
+  geom_rect(xmin = 0, xmax = 1, ymin = 0, ymax = 1, fill = 'yellow', alpha = 0.05) + 
+  geom_rect(xmin = 1, xmax = 3, ymin = 1, ymax = 2, fill = 'orange', alpha = 0.05) + 
+  geom_path(linetype = 2, linewidth = 0.4) +
+  geom_point(aes(size=Y, fill=Y), shape = 21) +
+  scale_fill_continuous(limits=c(min_Y,max_Y),breaks=seq(min_Y,max_Y)) + 
+  scale_size_continuous(limits=c(min_Y,max_Y),breaks=seq(min_Y,max_Y)) +
+  labs(y="Fishing Rate", x="Population Size", fill="Year", size="Year") +
+  guides(fill= guide_legend(), size=guide_legend()) +
+  scale_y_continuous(limits=c(0,2)) + scale_x_continuous(limits=c(0,3))
+  
+Obs <- log(delury1$CR)        # 観測されたCPUEの対数値
+Pred <- sum_res[rownames(sum_res)=="pred_n",1]        # CPUEのモデルによる予測値
+dat <- data.frame(Obs=Obs, Pred=Pred, START=factor(delury1$START))       # 観測値と予測値をまとめたもの
+ggplot(dat, aes(x=Obs, y=Pred, color=START, shape=START))+geom_point()+geom_abline(intercept=0, slope=1, linetype="dashed")+theme_bw()        # 観測と予測値の比較プロット（直線上に載っていると良い）．色を変えて初期個体数とその他個体数を区別
+par_comp <- rbind(par_msy_ss[1,], par_msy, par_msy_ss[1,]/par_msy)       # 状態空間モデルによるMSY関連パラメータと決定論的フォックスモデルによるMSY関連パラメータを比較
+rownames(par_comp) <- c("SS","Fox","Ratio")      # 列の名前を設定
+print(round(par_comp, 3))       # 比較結果を表示
+
+## 7 - 6 ランダム効果を含む統計量のバイアス補正
+
+sdrep_bc <- sdreport(obj, bias.correct=TRUE)       # ランダム効果を含む量のバイス補正を実行
+# sdrep_bc <- sdreport(obj, bias.correct=TRUE, bias.correct.control = list(sd = TRUE))         # 分散共分散にもバイアス補正を実行（計算時間がかかる）
+
+N0 <- summary(sdrep_bc)[rownames(summary(sdrep_bc))=="N_S",1:2]        # バイアス補正なしの初期個体数
+N0_bc <- summary(sdrep_bc)[rownames(summary(sdrep_bc))=="N_S",3:4]        # バイアス補正ありの初期個体数
+ggplot(dat=N0, aes(x=Year,y=N0[,1]))+geom_line()+geom_line(aes(x=Year,y=N0_bc[,1]),color="blue",linetype="dashed")+labs(x="Year", y="Population Size")+theme_bw()       # バイアス補正ありなしの個体数推定値を比較
+
+save(dat_ss, par_ss, delury, obj, mod_ss, sdrep, file="res_ss.rda")       # 次章で使用するため状態空間モデルの結果を保存
